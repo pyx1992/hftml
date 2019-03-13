@@ -66,8 +66,7 @@ class FixedIntervalSampler(Sampler):
     self._last_sampled_ts = 0
 
   def sampled(self, feed):
-    if self._last_sampled_ts > 0 and feed.timestamp - self._last_sampled_ts \
-        >= self._min_interval:
+    if feed.timestamp - self._last_sampled_ts >= self._min_interval:
       self._last_sampled_ts = feed.timestamp
       return True
     return False

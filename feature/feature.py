@@ -79,7 +79,7 @@ class BookFeature(Feature):
     features += [(total_bid - total_ask) / (total_bid + total_ask)]
 
     # Current mid price
-    features += [(self._book.bids[0][0] + self._book.asks[0][0]) / 2.0]
+    features += [np.log((self._book.bids[0][0] + self._book.asks[0][0]) / 2.0)]
     return features
 
   def reset(self):
@@ -107,7 +107,7 @@ class TimedVwapFeature(Feature):
         total += e[1][0] * e[1][1]
         qty += e[1][1]
       v = total / qty
-      return [v]
+      return [np.log(v)]
     return [np.nan]
 
   def reset(self):

@@ -13,6 +13,7 @@ def regression(file_path):
   df = df[~has_nan]
   y_idx = len(df.columns) - 1
   y_df = df.pop(str(y_idx))
+  print(y_df.describe())
   x_df = df
   columns = x_df.columns
   Xs = [x_df[col].tolist() for col in columns]

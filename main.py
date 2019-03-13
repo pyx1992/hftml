@@ -148,9 +148,10 @@ def extract_feature_reward():
   assert FLAGS.output_path
   extractor = FeatureRewardExtractor(
       'Okex', 'ETH', 'USD', 20190329,
-      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127],
+      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126],
       FLAGS.output_path)
-  extractor.add_samplers(BestBookLevelTakenSampler(2))
+  #extractor.add_samplers(BestBookLevelTakenSampler(2))
+  extractor.add_samplers(FixedIntervalSampler(1))
   extractor.add_feature(ArFeature(BookFeature(2), 5))
   extractor.add_feature(TimedVwapFeature(2 * 60))
   extractor.add_feature(TimedVwapFeature(10 * 60))
@@ -164,10 +165,10 @@ def main(argv):
   from model.linear_model import regression, LinearModelSignals
   olsres, Xs, Y = regression(FLAGS.output_path)
   predict_y = olsres.predict(Xs)
-  enter_buy = np.percentile(predict_y, 99)
-  enter_sell = np.percentile(predict_y, 1)
-  exit_buy = np.percentile(predict_y, 10)
-  exit_sell = np.percentile(predict_y, 90)
+  enter_buy = np.percentile(predict_y, 99.5)
+  enter_sell = np.percentile(predict_y, 0.5)
+  exit_buy = np.percentile(predict_y, 20)
+  exit_sell = np.percentile(predict_y, 80)
   print('enter buy:  %f' % enter_buy)
   print('enter sell: %f' % enter_sell)
   print('exit buy:   %f' % exit_buy)
@@ -176,9 +177,10 @@ def main(argv):
       olsres, enter_buy, enter_sell, exit_buy, exit_sell)
   backtest = BacktestReseacher(
       'Okex', 'ETH', 'USD', 20190329,
-      [20190128],
+      [20190127],
       lm_signals)
-  backtest.add_samplers(BestBookLevelTakenSampler(2))
+  #backtest.add_samplers(BestBookLevelTakenSampler(2))
+  backtest.add_samplers(FixedIntervalSampler(1))
   backtest.add_feature(ArFeature(BookFeature(2), 5))
   backtest.add_feature(TimedVwapFeature(2 * 60))
   backtest.add_feature(TimedVwapFeature(10 * 60))
