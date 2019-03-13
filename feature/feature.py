@@ -23,6 +23,34 @@ class Feature(object):
     raise NotImplementedError()
 
 
+class ArFeature(Feature):
+  def __init__(self, feature, ar_steps):
+    self._feature = feature
+    self._ar_steps = ar_steps
+    self._dq = deque(maxlen=ar_steps + 1)
+
+  def on_feed(self, feed):
+    self._feature.on_feed(feed)
+
+  def to_feature(self, ar=10000):
+    feature = self._feature.to_feature()
+    features = list(feature)
+    for i in range(min(ar, self._ar_steps)):
+      idx = len(self._dq) - 1 - i
+      if idx >= 0:
+        features += self._dq[-(i + 1)]
+      else:
+        features += [np.nan] * len(feature)
+    self._dq.append(feature)
+    return features
+
+  def reset(self):
+    self._feature.reset()
+
+  def ready(self):
+    return len(self._dq) == self._ar_steps + 1
+
+
 class BookFeature(Feature):
   def __init__(self, levels):
     self._book = None
@@ -37,24 +65,21 @@ class BookFeature(Feature):
   def to_feature(self):
     features = []
     # Bid-ask spread
-    features += [self._book.asks[0][0] / self._book.bids[0][0] - 1]
+    features += [(self._book.asks[0][0] - self._book.bids[0][0]) /
+                 (self._book.bids[0][0] + self._book.asks[0][0])]
 
     # Bid-ask imbalance
-    price_ratio = []
-    qty_ratio = []
-    base_price = self._book.bids[0][0]
-    base_qty = self._book.bids[0][1]
+    bid_qty = []
+    ask_qty = []
     for i in range(self._levels):
-      price_ratio.append(self._book.bids[i][0] / base_price)
-      price_ratio.append(self._book.asks[i][0] / base_price)
-      qty_ratio.append(self._book.bids[i][1] / base_qty)
-      qty_ratio.append(self._book.asks[i][1] / base_qty)
-    features += np.log(price_ratio[1:] + qty_ratio[1:]).tolist()
+      bid_qty.append(self._book.bids[i][1])
+      ask_qty.append(self._book.asks[i][1])
+    total_bid = sum(bid_qty)
+    total_ask = sum(ask_qty)
+    features += [(total_bid - total_ask) / (total_bid + total_ask)]
 
-    # Change of best levels
-    features += np.log(
-        [self._book.bids[0][0] / self._last_book.bids[0][0],
-         self._book.asks[0][0] / self._last_book.asks[0][0]]).tolist()
+    # Current mid price
+    features += [(self._book.bids[0][0] + self._book.asks[0][0]) / 2.0]
     return features
 
   def reset(self):
@@ -81,8 +106,8 @@ class TimedVwapFeature(Feature):
       for e in dq:
         total += e[1][0] * e[1][1]
         qty += e[1][1]
-      v = 2 * total / qty / (self._book.bids[0][0] + self._book.asks[0][0])
-      return [np.log(v)]
+      v = total / qty
+      return [v]
     return [np.nan]
 
   def reset(self):
@@ -112,10 +137,10 @@ class TimedTradeImbalanceFeature(Feature):
       if sells.shape[0] > 0:
         total_sells += np.sum(sells[:, 1])
         count_sells += sells.shape[0]
-      qty_imb = np.log(total_buys / total_sells)
-      cnt_imb = np.log(count_buys / count_sells)
+      qty_imb = total_buys / total_sells
+      cnt_imb = count_buys / count_sells
       return [qty_imb, cnt_imb]
-    return [np.nan, np.nan]
+    return [1, 1]
 
   def reset(self):
     pass

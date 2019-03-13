@@ -25,32 +25,36 @@ def mid(book):
   return (book.bids[0][0] + book.asks[0][0]) / 2.0
 
 
-class Researcher(object):
-  def __init__(self, exchange, base, quote, expiry, dates, output_path):
+class FeatureRewardResearcher(object):
+  def __init__(self, exchange, base, quote, expiry, dates):
     self._exchange = exchange
     self._base = base
     self._quote = quote
     self._dates = dates
-    self._samplers = [BestBookLevelTakenSampler(3)]
-    self._features = [
-        BookFeature(3), TimedVwapFeature(5 * 60), TimedVwapFeature(30 * 60),
-        StepTradeImbalanceFeature(), TimedVolumeFeature(3600, 5)]
+    self._samplers = []
+    self._features = []
     self._feeder = Feeder(dates, exchange, base, quote, expiry)
     self._feeder.subscribe_book(self.on_feed)
     self._feeder.subscribe_trade(self.on_feed)
     self._last_sampled_book = None
     self._current_book = None
     self._last_features = None
-    self._reward = None
-    self._feature_reward = []
 
-  def output_feature_reward(self):
-    df = pd.DataFrame(self._feature_reward)
-    df.to_csv(FLAGS.output_path, index=False)
+  def add_samplers(self, sampler):
+    self._samplers.append(sampler)
+
+  def add_feature(self, feature):
+    self._features.append(feature)
+
+  def on_sampled(self, feature, reward):
+    raise NotImplementedError()
+
+  def on_completed(self):
+    raise NotImplementedError()
 
   def start(self):
     self._feeder.start_feed()
-    self.output_feature_reward()
+    self.on_completed()
 
   def ready(self):
     return self._last_sampled_book is not None and self._last_features is not None
@@ -72,7 +76,7 @@ class Researcher(object):
     if sampled:
       if self.ready():
         reward = self.get_reward()
-        self._feature_reward.append(self._last_features + [reward])
+        self.on_sampled(self._last_features, reward)
       features = []
       for feature in self._features:
         new_feature = feature.to_feature()
@@ -83,13 +87,103 @@ class Researcher(object):
       self._last_sampled_book = self._current_book
 
 
-def main(argv):
+class FeatureRewardExtractor(FeatureRewardResearcher):
+  def __init__(self, exchange, base, quote, expiry, dates, output_path):
+    FeatureRewardResearcher.__init__(self, exchange, base, quote, expiry, dates)
+    self._output_path = output_path
+    self._feature_reward = []
+
+  def on_sampled(self, feature, reward):
+    self._feature_reward.append(feature + [reward])
+
+  def on_completed(self):
+    df = pd.DataFrame(self._feature_reward)
+    df.to_csv(self._output_path, index=False)
+
+
+class BacktestReseacher(FeatureRewardResearcher):
+  def __init__(self, exchange, base, quote, expiry, dates, signals):
+    FeatureRewardResearcher.__init__(self, exchange, base, quote, expiry, dates)
+    self._signals = signals
+    self._position = 0.0
+    self._cash = 0.0
+    self._volume = 0.0
+    self._pnl = 0.0
+
+  def on_sampled(self, feature, _):
+    self._signals.on_feature(feature)
+    target_pos = self._position
+    if self._signals.should_enter_buy():
+      target_pos = 1
+    elif self._signals.should_enter_sell():
+      target_pos = -1
+    else:
+      if self._position > 0 and self._signals.should_exit_buy():
+        target_pos = 0
+      elif self._position < 0 and self._signals.should_exit_sell():
+        target_pos = 0
+
+    diff_pos = target_pos - self._position
+    if abs(diff_pos) > 1e-6:
+      if diff_pos > 0:
+        price = self._current_book.asks[0][0]
+        print('Buy %f @ %f' % (abs(diff_pos), price))
+      else:
+        price = self._current_book.bids[0][0]
+        print('Sell %f @ %f' % (abs(diff_pos), price))
+      diff_cash = -diff_pos * price
+      self._cash += diff_cash
+      self._position = target_pos
+      self._volume += abs(diff_cash)
+      self._pnl = self._cash + self._position * (
+          self._current_book.bids[0][0] + self._current_book.asks[0][0]) / 2.0
+      print('Pnl: %f, Volume: %f' % (self._pnl, self._volume))
+
+  def on_completed(self):
+    print('Total Pnl: %f' % self._pnl)
+    print('Total Volume %f' % self._volume)
+
+
+def extract_feature_reward():
   assert FLAGS.output_path
-  researcher = Researcher(
-      'Okex', 'ETH', 'USDT', None,
-      [20190121, 20190122, 20190123, 20190124],
+  extractor = FeatureRewardExtractor(
+      'Okex', 'ETH', 'USD', 20190329,
+      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127],
       FLAGS.output_path)
-  researcher.start()
+  extractor.add_samplers(BestBookLevelTakenSampler(2))
+  extractor.add_feature(ArFeature(BookFeature(2), 5))
+  extractor.add_feature(TimedVwapFeature(2 * 60))
+  extractor.add_feature(TimedVwapFeature(10 * 60))
+  extractor.add_feature(ArFeature(StepTradeImbalanceFeature(), 3))
+  extractor.start()
+
+
+def main(argv):
+  #extract_feature_reward()
+  #return
+  from model.linear_model import regression, LinearModelSignals
+  olsres, Xs, Y = regression(FLAGS.output_path)
+  predict_y = olsres.predict(Xs)
+  enter_buy = np.percentile(predict_y, 99)
+  enter_sell = np.percentile(predict_y, 1)
+  exit_buy = np.percentile(predict_y, 10)
+  exit_sell = np.percentile(predict_y, 90)
+  print('enter buy:  %f' % enter_buy)
+  print('enter sell: %f' % enter_sell)
+  print('exit buy:   %f' % exit_buy)
+  print('exit sell:  %f' % exit_sell)
+  lm_signals = LinearModelSignals(
+      olsres, enter_buy, enter_sell, exit_buy, exit_sell)
+  backtest = BacktestReseacher(
+      'Okex', 'ETH', 'USD', 20190329,
+      [20190128],
+      lm_signals)
+  backtest.add_samplers(BestBookLevelTakenSampler(2))
+  backtest.add_feature(ArFeature(BookFeature(2), 5))
+  backtest.add_feature(TimedVwapFeature(2 * 60))
+  backtest.add_feature(TimedVwapFeature(10 * 60))
+  backtest.add_feature(ArFeature(StepTradeImbalanceFeature(), 3))
+  backtest.start()
 
 
 if __name__ == '__main__':

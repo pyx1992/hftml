@@ -12,6 +12,7 @@ class Sampler(object):
     raise NotImplementedError()
 
 
+# Sampled if best levels of book are taken.
 class BestBookLevelTakenSampler(Sampler):
   def __init__(self, levels):
     assert levels > 0
@@ -30,6 +31,7 @@ class BestBookLevelTakenSampler(Sampler):
     return sampled
 
 
+# Sampled if trade with large volume occurs.
 class LargeTradeSampler(Sampler):
   def __init__(self, timewindowsec, std_threshold):
     self._timewindow = timewindowsec * 10 ** 9
@@ -55,3 +57,17 @@ class LargeTradeSampler(Sampler):
         sampled = self._triggered(feed)
       self._dq.append(timestamp, feed.qty)
     return sampled
+
+
+# Sampled every fixed interval.
+class FixedIntervalSampler(Sampler):
+  def __init__(self, min_intervalsec):
+    self._min_interval = min_intervalsec * 10 ** 9
+    self._last_sampled_ts = 0
+
+  def sampled(self, feed):
+    if self._last_sampled_ts > 0 and feed.timestamp - self._last_sampled_ts \
+        >= self._min_interval:
+      self._last_sampled_ts = feed.timestamp
+      return True
+    return False
