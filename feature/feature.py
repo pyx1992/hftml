@@ -62,6 +62,33 @@ class BookFeature(Feature):
       self._last_book = self._book
       self._book = feed
 
+  def _get_delta_book_imbalance(self):
+    if self._last_book is None:
+      return 0
+    old_bid = 0
+    for i in range(self._levels):
+      old_bid += self._last_book.bids[i][1]
+    new_bid = 0
+    for bid in self._book.bids:
+      if bid[0] < self._last_book.bids[self._levels - 1][0]:
+        break
+      new_bid += bid[1]
+    delta_bid = new_bid - old_bid
+
+    old_ask = 0
+    for i in range(self._levels):
+      old_ask += self._last_book.asks[i][1]
+    new_ask = 0
+    for ask in self._book.asks:
+      if ask[0] > self._last_book.asks[self._levels - 1][0]:
+        break
+      new_ask += ask[1]
+    delta_ask = new_ask - old_ask
+
+    bs_overwhelm_ratio = (delta_bid - delta_ask) / (old_bid + old_ask)
+    return bs_overwhelm_ratio
+
+
   def to_feature(self):
     features = []
     # Bid-ask spread
@@ -77,6 +104,9 @@ class BookFeature(Feature):
     total_bid = sum(bid_qty)
     total_ask = sum(ask_qty)
     features += [(total_bid - total_ask) / (total_bid + total_ask)]
+
+    # Buy-sell overwhelming ratio
+    features += [self._get_delta_book_imbalance()]
 
     # Current mid price
     features += [np.log((self._book.bids[0][0] + self._book.asks[0][0]) / 2.0)]
