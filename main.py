@@ -41,6 +41,7 @@ class FeatureRewardResearcher(object):
     self._last_sampled_book = None
     self._current_book = None
     self._last_features = None
+    self._last_sampled_ts = np.nan
 
   def add_samplers(self, sampler):
     self._samplers.append(sampler)
@@ -79,7 +80,7 @@ class FeatureRewardResearcher(object):
       if self.ready():
         reward = self.get_reward()
         self.on_sampled(self._last_features, reward)
-      features = []
+      features = [np.log(feed.timestamp - self._last_sampled_ts)]
       for feature in self._features:
         new_feature = feature.to_feature()
         assert isinstance(new_feature, list)
@@ -87,6 +88,7 @@ class FeatureRewardResearcher(object):
         feature.reset()
       self._last_features = features
       self._last_sampled_book = self._current_book
+      self._last_sampled_ts = feed.timestamp
 
 
 class FeatureRewardExtractor(FeatureRewardResearcher):
@@ -127,6 +129,7 @@ class BacktestReseacher(FeatureRewardResearcher):
 
     diff_pos = target_pos - self._position
     dt = datetime.datetime.fromtimestamp(self._current_book.timestamp * 1e-9)
+    price = mid(self._current_book)
     if abs(diff_pos) > 1e-6:
       if diff_pos > 0:
         price = self._current_book.asks[0][0]
@@ -148,23 +151,25 @@ class BacktestReseacher(FeatureRewardResearcher):
 
 
 def add_samplers_features(researcher):
-  researcher.add_samplers(BestBookLevelTakenSampler(1))
-  #researcher.add_samplers(FixedIntervalSampler(10))
+  #researcher.add_samplers(BestBookLevelTakenSampler(2))
+  researcher.add_samplers(FixedIntervalSampler(3))
   #researcher.add_samplers(PriceChangedSampler(5))
+
   researcher.add_feature(SnapshotBookFeature(2))
   researcher.add_feature(TimedVwapFeature(1 * 60))
   researcher.add_feature(TimedVwapFeature(2 * 60))
   researcher.add_feature(TimedVwapFeature(5 * 60))
   researcher.add_feature(TimedVwapFeature(10 * 60))
+  researcher.add_feature(ArFeature(StepBookFeature(), 3))
   researcher.add_feature(ArFeature(StepVwapFeature(), 3))
-  researcher.add_feature(ArFeature(StepTradeImbalanceFeature(), 2))
-  #researcher.add_feature(ArFeature(TimedTradeImbalanceFeature(2), 2))
+  researcher.add_feature(ArFeature(StepTradeFeature(), 2))
+  researcher.add_feature(ArFeature(StepVolumeFeature(), 2))
 
 
 def extract_feature_reward():
   assert FLAGS.output_path
   extractor = FeatureRewardExtractor(
-      'Okex', 'EOS', 'USD', 20190329,
+      'Okex', 'ETH', 'USD', 20190329,
       [20190121, 20190122, 20190123, 20190124],
       FLAGS.output_path)
   add_samplers_features(extractor)
@@ -172,7 +177,7 @@ def extract_feature_reward():
 
 
 def main(argv):
-  extract_feature_reward()
+  #extract_feature_reward()
   #return
   from model.linear_model import regression, LinearModelSignals
   olsres, Xs, Y = regression(FLAGS.output_path)
@@ -185,12 +190,12 @@ def main(argv):
   print('enter sell: %f' % enter_sell)
   print('exit buy:   %f' % exit_buy)
   print('exit sell:  %f' % exit_sell)
-  return
+  #return
   lm_signals = LinearModelSignals(
       olsres, enter_buy, enter_sell, exit_buy, exit_sell)
   backtest = BacktestReseacher(
-      'Okex', 'EOS', 'USD', 20190329,
-      [20190125, 20190126],
+      'Okex', 'ETH', 'USD', 20190329,
+      [20190128],
       lm_signals)
   add_samplers_features(backtest)
   backtest.start()

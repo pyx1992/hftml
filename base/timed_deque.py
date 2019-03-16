@@ -31,3 +31,6 @@ class TimedDeque(object):
 
   def clear(self):
     self._dq = deque()
+
+  def size(self):
+    return len(self._dq)

@@ -133,7 +133,62 @@ class TimedBookFeature(Feature):
       self._dq.append(feed.timestamp, feed)
 
   def to_feature(self):
+    features = []
+    bids0 = np.array([[data[0]] + list(data[1].bids[0]) for data in self._dq.data()])
+    asks0 = np.array([[data[0]] + list(data[1].asks[0]) for data in self._dq.data()])
+
+    # Time weighted mid price
+    if bids0.shape[0] > 0:
+      duration = bids0[-1,0] - bids0[0,0]
+      if duration == 0:
+        twmid = (bids0[0,1] + asks0[0,1]) / 2.0
+      else:
+        twmid = np.sum(
+            (bids0[:-1,1] + asks0[:-1,1]) / 2.0 * (bids0[1:,0] - bids0[:-1,0])) \
+            / duration
+    else:
+      twmid = np.nan
+    features.append(np.log(twmid))
+
+    # Time weighted bid ask spread.
+    if bids0.shape[0] > 0:
+      duration = bids0[-1,0] - bids0[0,0]
+      if duration == 0:
+        twspread = (asks0[0,1] - bids0[0,1]) / (bids0[0,1] + asks0[0,1])
+      else:
+        twspread = np.sum(
+            (asks0[0,1] - bids0[0,1]) / (bids0[0,1] + asks0[0,1]) *
+            (bids0[1:,0] - bids0[:-1,0])) / duration
+    else:
+      twspread = np.nan
+    features.append(twspread)
+
+    # Time weighted best level qty.
+    if bids0.shape[0] > 0:
+      duration = bids0[-1,0] - bids0[0,0]
+      if duration == 0:
+        twbidq = bids0[0,2]
+        twaskq = asks0[0,2]
+      else:
+        twbidq = np.sum(bids0[0,2] * (bids0[1:,0] - bids0[:-1,0]) / duration)
+        twaskq = np.sum(asks0[0,2] * (asks0[1:,0] - asks0[:-1,0]) / duration)
+    else:
+      twbidq = np.nan
+      twaskq = np.nan
+    features += [np.log(twbidq), np.log(twaskq)]
+
+    return features
+
+  def reset(self):
     pass
+
+
+class StepBookFeature(TimedBookFeature):
+  def __init__(self):
+    TimedBookFeature.__init__(self, -1)
+
+  def reset(self):
+    self._dq.clear()
 
 
 class TimedVwapFeature(Feature):
@@ -157,7 +212,7 @@ class TimedVwapFeature(Feature):
         total += e[1][0] * e[1][1]
         qty += e[1][1]
       v = total / qty
-      return [np.log(v]
+      return [np.log(v)]
     return [np.nan]
 
   def reset(self):
@@ -172,7 +227,7 @@ class StepVwapFeature(TimedVwapFeature):
     self._dq.clear()
 
 
-class TimedTradeImbalanceFeature(Feature):
+class TimedTradeFeature(Feature):
   def __init__(self, timewindowsec):
     self._timewindow = timewindowsec * 10 ** 9
     self._dq = TimedDeque(self._timewindow)
@@ -182,6 +237,11 @@ class TimedTradeImbalanceFeature(Feature):
       self._dq.append(feed.timestamp, (feed.price, feed.qty, feed.side))
 
   def to_feature(self):
+    features = []
+    total_buys = 0.1
+    count_buys = 0.1
+    total_sells = 0.1
+    count_sells = 0.1
     if not self._dq.empty():
       buys = np.array([[e[0], e[1]] for _, e in self._dq.data() if e[2] == OrderSide.BUY])
       sells = np.array([[e[0], e[1]] for _, e in self._dq.data() if e[2] == OrderSide.SELL])
@@ -195,27 +255,29 @@ class TimedTradeImbalanceFeature(Feature):
       if sells.shape[0] > 0:
         total_sells += np.sum(sells[:, 1])
         count_sells += sells.shape[0]
-      qty_imb = (total_buys - total_sells) / (total_buys + total_sells)
-      cnt_imb = (count_buys - count_sells) / (count_buys + count_sells)
-      return [qty_imb, cnt_imb]
-    return [0, 0]
+    qty_imb = (total_buys - total_sells) / (total_buys + total_sells)
+    cnt_imb = (count_buys - count_sells) / (count_buys + count_sells)
+    features += [qty_imb, cnt_imb]
+    features += [np.log(total_buys), np.log(total_sells),
+                 np.log(count_buys), np.log(count_sells)]
+
+    return features
 
   def reset(self):
     pass
 
 
-class StepTradeImbalanceFeature(TimedTradeImbalanceFeature):
+class StepTradeFeature(TimedTradeFeature):
   def __init__(self):
-    TimedTradeImbalanceFeature.__init__(self, -1)
+    TimedTradeFeature.__init__(self, -1)
 
   def reset(self):
     self._dq.clear()
 
 
 class TimedVolumeFeature(Feature):
-  def __init__(self, timewindowsec, measure_window_sec):
+  def __init__(self, timewindowsec):
     self._timewindow = timewindowsec * 10 ** 9
-    self._measure_window = measure_window_sec * 10 ** 9
     self._dq = TimedDeque(self._timewindow)
 
   def on_feed(self, feed):
@@ -223,20 +285,28 @@ class TimedVolumeFeature(Feature):
       self._dq.append(feed.timestamp, feed.qty)
 
   def to_feature(self):
-    data = pd.DataFrame(np.array(self._dq.data()))
-    if data.shape[0] > 0:
-      data.columns = ['timestamp', 'qty']
-      data['group'] = (
-          data.iloc[-1]['timestamp'] - data['timestamp']) / self._measure_window
-      data['group'] = data['group'].astype(int)
-      gqty = data.groupby('group')['qty'].sum()
-      total_intervals = max(gqty.index) + 1
-      no_trades_intervals = total_intervals - gqty.shape[0]
-      gqty = [0] * no_trades_intervals + gqty.tolist()
-      assert len(gqty) == total_intervals, '%s %s' % (len(gqty), total_intervals)
-      stats = (gqty[-1] - np.mean(gqty)) / np.std(gqty)
-      return [stats]
-    return [np.nan]
+    features = []
+    data = np.array(self._dq.data())
+    # Trade qty mean and std
+    mean_qty = 0.1
+    std_qty = 0.1
+    if not self._dq.empty():
+      mean_qty += np.mean(data[:,1])
+      std_qty += np.std(data[:,1])
+    features += [np.log(mean_qty), np.log(std_qty)]
+
+    # Trade count
+    features.append(np.log(self._dq.size() + 0.1))
+
+    return features
 
   def reset(self):
     pass
+
+
+class StepVolumeFeature(TimedVolumeFeature):
+  def __init__(self):
+    TimedVolumeFeature.__init__(self, -1)
+
+  def reset(self):
+    self._dq.clear()
