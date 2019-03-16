@@ -51,7 +51,7 @@ class ArFeature(Feature):
     return len(self._dq) == self._ar_steps + 1
 
 
-class BookFeature(Feature):
+class SnapshotBookFeature(Feature):
   def __init__(self, levels):
     self._book = None
     self._last_book = None
@@ -88,7 +88,6 @@ class BookFeature(Feature):
     bs_overwhelm_ratio = (delta_bid - delta_ask) / (old_bid + old_ask)
     return bs_overwhelm_ratio
 
-
   def to_feature(self):
     features = []
     # Bid-ask spread
@@ -106,13 +105,34 @@ class BookFeature(Feature):
     features += [(total_bid - total_ask) / (total_bid + total_ask)]
 
     # Buy-sell overwhelming ratio
-    features += [self._get_delta_book_imbalance()]
+    #features += [self._get_delta_book_imbalance()]
 
     # Current mid price
     features += [np.log((self._book.bids[0][0] + self._book.asks[0][0]) / 2.0)]
+
+    # Volume weighted mid price
+    a, b = 0.0, 0.0
+    for i in range(self._levels):
+      a += 1.0 * self._book.bids[i][0] / self._book.bids[i][1] + \
+          1.0 * self._book.asks[i][0] / self._book.asks[i][1]
+      b += 1.0 / self._book.bids[i][1] + 1.0 / self._book.asks[i][1]
+      features += [np.log(a / b)]
     return features
 
   def reset(self):
+    pass
+
+
+class TimedBookFeature(Feature):
+  def __init__(self, timewindowsec):
+    self._timewindow = timewindowsec * 10 ** 9
+    self._dq = TimedDeque(self._timewindow)
+
+  def on_feed(self, feed):
+    if feed.feed_type == FeedType.BOOK:
+      self._dq.append(feed.timestamp, feed)
+
+  def to_feature(self):
     pass
 
 
@@ -137,11 +157,19 @@ class TimedVwapFeature(Feature):
         total += e[1][0] * e[1][1]
         qty += e[1][1]
       v = total / qty
-      return [np.log(v)]
+      return [np.log(v]
     return [np.nan]
 
   def reset(self):
     pass
+
+
+class StepVwapFeature(TimedVwapFeature):
+  def __init__(self):
+    TimedVwapFeature.__init__(self, -1)
+
+  def reset(self):
+    self._dq.clear()
 
 
 class TimedTradeImbalanceFeature(Feature):
@@ -167,10 +195,10 @@ class TimedTradeImbalanceFeature(Feature):
       if sells.shape[0] > 0:
         total_sells += np.sum(sells[:, 1])
         count_sells += sells.shape[0]
-      qty_imb = total_buys / total_sells
-      cnt_imb = count_buys / count_sells
+      qty_imb = (total_buys - total_sells) / (total_buys + total_sells)
+      cnt_imb = (count_buys - count_sells) / (count_buys + count_sells)
       return [qty_imb, cnt_imb]
-    return [1, 1]
+    return [0, 0]
 
   def reset(self):
     pass

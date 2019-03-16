@@ -1,6 +1,8 @@
 # 2019
 # author: yuxuan
 
+import datetime
+
 import numpy as np
 import pandas as pd
 from absl import app, flags
@@ -124,13 +126,14 @@ class BacktestReseacher(FeatureRewardResearcher):
         target_pos = 0
 
     diff_pos = target_pos - self._position
+    dt = datetime.datetime.fromtimestamp(self._current_book.timestamp * 1e-9)
     if abs(diff_pos) > 1e-6:
       if diff_pos > 0:
         price = self._current_book.asks[0][0]
-        print('Buy %f @ %f' % (abs(diff_pos), price))
+        print('Buy %f @ %f %s' % (abs(diff_pos), price, dt))
       else:
         price = self._current_book.bids[0][0]
-        print('Sell %f @ %f' % (abs(diff_pos), price))
+        print('Sell %f @ %f %s' % (abs(diff_pos), price, dt))
       diff_cash = -diff_pos * price
       self._cash += diff_cash
       self._position = target_pos
@@ -144,47 +147,52 @@ class BacktestReseacher(FeatureRewardResearcher):
     print('Total Volume %f' % self._volume)
 
 
+def add_samplers_features(researcher):
+  researcher.add_samplers(BestBookLevelTakenSampler(1))
+  #researcher.add_samplers(FixedIntervalSampler(10))
+  #researcher.add_samplers(PriceChangedSampler(5))
+  researcher.add_feature(SnapshotBookFeature(2))
+  researcher.add_feature(TimedVwapFeature(1 * 60))
+  researcher.add_feature(TimedVwapFeature(2 * 60))
+  researcher.add_feature(TimedVwapFeature(5 * 60))
+  researcher.add_feature(TimedVwapFeature(10 * 60))
+  researcher.add_feature(ArFeature(StepVwapFeature(), 3))
+  researcher.add_feature(ArFeature(StepTradeImbalanceFeature(), 2))
+  #researcher.add_feature(ArFeature(TimedTradeImbalanceFeature(2), 2))
+
+
 def extract_feature_reward():
   assert FLAGS.output_path
   extractor = FeatureRewardExtractor(
-      'Okex', 'ETH', 'USD', 20190329,
-      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126],
+      'Okex', 'EOS', 'USD', 20190329,
+      [20190121, 20190122, 20190123, 20190124],
       FLAGS.output_path)
-  #extractor.add_samplers(BestBookLevelTakenSampler(2))
-  extractor.add_samplers(FixedIntervalSampler(1))
-  extractor.add_feature(ArFeature(BookFeature(2), 5))
-  extractor.add_feature(TimedVwapFeature(2 * 60))
-  extractor.add_feature(TimedVwapFeature(10 * 60))
-  extractor.add_feature(ArFeature(StepTradeImbalanceFeature(), 3))
+  add_samplers_features(extractor)
   extractor.start()
 
 
 def main(argv):
-  #extract_feature_reward()
+  extract_feature_reward()
   #return
   from model.linear_model import regression, LinearModelSignals
   olsres, Xs, Y = regression(FLAGS.output_path)
   predict_y = olsres.predict(Xs)
-  enter_buy = np.percentile(predict_y, 99.5)
-  enter_sell = np.percentile(predict_y, 0.5)
-  exit_buy = np.percentile(predict_y, 20)
-  exit_sell = np.percentile(predict_y, 80)
+  enter_buy = np.percentile(predict_y, 99)
+  enter_sell = np.percentile(predict_y, 1)
+  exit_buy = np.percentile(predict_y, 30)
+  exit_sell = np.percentile(predict_y, 70)
   print('enter buy:  %f' % enter_buy)
   print('enter sell: %f' % enter_sell)
   print('exit buy:   %f' % exit_buy)
   print('exit sell:  %f' % exit_sell)
+  return
   lm_signals = LinearModelSignals(
       olsres, enter_buy, enter_sell, exit_buy, exit_sell)
   backtest = BacktestReseacher(
-      'Okex', 'ETH', 'USD', 20190329,
-      [20190127],
+      'Okex', 'EOS', 'USD', 20190329,
+      [20190125, 20190126],
       lm_signals)
-  #backtest.add_samplers(BestBookLevelTakenSampler(2))
-  backtest.add_samplers(FixedIntervalSampler(1))
-  backtest.add_feature(ArFeature(BookFeature(2), 5))
-  backtest.add_feature(TimedVwapFeature(2 * 60))
-  backtest.add_feature(TimedVwapFeature(10 * 60))
-  backtest.add_feature(ArFeature(StepTradeImbalanceFeature(), 3))
+  add_samplers_features(backtest)
   backtest.start()
 
 

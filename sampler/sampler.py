@@ -70,3 +70,18 @@ class FixedIntervalSampler(Sampler):
       self._last_sampled_ts = feed.timestamp
       return True
     return False
+
+
+# Sampled if price changed beyond threshold.
+class PriceChangedSampler(Sampler):
+  def __init__(self, threshold_bp):
+    self._threshold = threshold_bp * 1e-4
+    self._ref_mid_price = 0
+
+  def sampled(self, feed):
+    if feed.feed_type == FeedType.BOOK:
+      mid = (feed.bids[0][0] + feed.asks[0][0]) / 2.0
+      if abs(mid - self._ref_mid_price) > self._ref_mid_price * self._threshold:
+        self._ref_mid_price = mid
+        return True
+    return False
