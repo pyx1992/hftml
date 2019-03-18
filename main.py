@@ -23,7 +23,7 @@ def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
   #researcher.add_samplers(PriceChangedSampler(5))
-  researcher.add_samplers(LargeTradeSampler(300, 2))
+  researcher.add_samplers(LargeTradeSampler(180, 2))
 
   researcher.add_feature(SnapshotBookFeature(2))
   researcher.add_feature(TimedVwapFeature(1 * 60))
@@ -49,7 +49,7 @@ def filter_nan(df):
   return df[~np.any(pd.isnull(df), 1)]
 
 
-def method1(sample_path, model_cls):
+def method1(sample_path, classifier_cls):
   enter_threshold = 5e-4
   exit_threshold = 2e-4
   df = pd.read_csv(sample_path)
@@ -72,10 +72,10 @@ def method1(sample_path, model_cls):
     print(y.value_counts())
     model.train_model(x, y)
 
-  buy_enter_model = model_cls()
-  buy_exit_model = model_cls()
-  sell_enter_model = model_cls()
-  sell_exit_model = model_cls()
+  buy_enter_model = classifier_cls()
+  buy_exit_model = classifier_cls()
+  sell_enter_model = classifier_cls()
+  sell_exit_model = classifier_cls()
   train_model(buy_enter_model, df, y > enter_threshold)
   train_model(buy_exit_model, df, y < -exit_threshold)
   train_model(sell_enter_model, df, y < -enter_threshold)
@@ -120,7 +120,6 @@ def method1(sample_path, model_cls):
     def should_exit_sell(self):
       return self._should_exit_sell or self._should_enter_buy
 
-
   backtest = BacktestReseacher(
     'Okex', 'ETH', 'USD', 20190329,
     [20190128, 20190129],
@@ -129,15 +128,67 @@ def method1(sample_path, model_cls):
   backtest.start()
 
 
+def method2(sample_path, regressor_cls):
+  df = pd.read_csv(sample_path)
+  df = filter_nan(df)
+  y_col = df.columns[-1]
+  y = df.pop(y_col)
+
+  model = regressor_cls()
+  model.train_model(df, y)
+
+  y_hat = model.predict(df)
+  y_hat = pd.DataFrame(y_hat)
+  #print(df)
+  print(y_hat)
+  print(y_hat[0].value_counts())
+  #print(y_hat.describe())
+
+  class MySignals(Signals):
+    def __init__(self, model, enter_threshold, exit_threshold):
+      self._model = model
+      self._enter_threshold = enter_threshold
+      self._exit_threshold = exit_threshold
+      self._feature = None
+      self._pred = 0.0
+
+    def on_feature(self, feature):
+      feature = np.array([feature])
+      #print(feature)
+      self._feature = feature
+      if np.any(np.isnan(feature)):
+        return
+      self._pred = self._model.predict(feature)[0, 0]
+
+    def should_enter_buy(self):
+      return self._pred > self._enter_threshold
+
+    def should_exit_buy(self):
+      return self._pred < -self._exit_threshold
+
+    def should_enter_sell(self):
+      return self._pred < -self._enter_threshold
+
+    def should_exit_sell(self):
+      return self._pred > self._exit_threshold
+
+  backtest = BacktestReseacher(
+    'Okex', 'ETH', 'USD', 20190329, [20190128, 20190129],
+    MySignals(model, 6e-4, 3e-4))
+  add_samplers_features(backtest)
+  backtest.start()
+
+
 def main(argv):
   assert FLAGS.output_path
   output_path = FLAGS.output_path
-  extract_feature_reward(output_path)
+  #extract_feature_reward(output_path)
   #return
   from model.svm_classifier import SvmClassifier
-  from model.sequential import SequentialClassifier
+  from model.sequential import SequentialClassifier, SequentialRegressor
   #method1(output_path, SvmClassifier)
-  method1(output_path, SequentialClassifier)
+  #method1(output_path, SequentialClassifier)
+  method2(output_path, SequentialRegressor)
   return
 
 

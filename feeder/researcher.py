@@ -129,7 +129,7 @@ class BacktestReseacher(FeatureRewardResearcher):
 
     diff_pos = target_pos - self._position
     dt = datetime.datetime.fromtimestamp(self._current_book.timestamp * 1e-9)
-    price = mid(self._current_book)
+    #price = mid(self._current_book)
     if abs(diff_pos) > 1e-6:
       if diff_pos > 0:
         price = self._current_book.asks[0][0]
