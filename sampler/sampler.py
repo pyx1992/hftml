@@ -39,7 +39,7 @@ class LargeTradeSampler(Sampler):
     self._dq = TimedDeque(self._timewindow)
 
   def ready(self, feed):
-    return self._dq.ready()
+    return self._dq.ready(feed.timestamp)
 
   def _triggered(self, trade):
     dq = self._dq.data()
@@ -50,7 +50,7 @@ class LargeTradeSampler(Sampler):
 
   def sampled(self, feed):
     timestamp = feed.timestamp
-    self._dq.upadte(timestamp)
+    self._dq.update(timestamp)
     sampled = False
     if feed.feed_type == FeedType.TRADE:
       if self.ready(feed):

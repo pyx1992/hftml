@@ -1,8 +1,6 @@
 # 2019
 # author: yuxuan
 
-import datetime
-
 import numpy as np
 import pandas as pd
 from absl import app, flags
@@ -23,8 +21,9 @@ flags.DEFINE_string(
 
 def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
-  researcher.add_samplers(FixedIntervalSampler(3))
+  #researcher.add_samplers(FixedIntervalSampler(5))
   #researcher.add_samplers(PriceChangedSampler(5))
+  researcher.add_samplers(LargeTradeSampler(300, 2))
 
   researcher.add_feature(SnapshotBookFeature(2))
   researcher.add_feature(TimedVwapFeature(1 * 60))
@@ -51,7 +50,7 @@ def filter_nan(df):
 
 
 def method1(sample_path, model_cls):
-  enter_threshold = 8e-4
+  enter_threshold = 5e-4
   exit_threshold = 2e-4
   df = pd.read_csv(sample_path)
   df = filter_nan(df)
@@ -59,6 +58,17 @@ def method1(sample_path, model_cls):
   y = df.pop(y_col)
 
   def train_model(model, x, y):
+    print(y.value_counts())
+    one_mask = y == 1
+    zero_mask = y == 0
+    multiplier = np.sum(zero_mask) / np.sum(one_mask)
+    if multiplier >= 2:
+      multiplier = int(multiplier)
+      x1 = x[one_mask]
+      y1 = y[one_mask]
+      for i in range(multiplier // 2):
+        x = x.append(x1)
+        y = y.append(y1)
     print(y.value_counts())
     model.train_model(x, y)
 
@@ -70,6 +80,7 @@ def method1(sample_path, model_cls):
   train_model(buy_exit_model, df, y < -exit_threshold)
   train_model(sell_enter_model, df, y < -enter_threshold)
   train_model(sell_exit_model, df, y > exit_threshold)
+  #return
 
   class MySignals(Signals):
     def __init__(self,
@@ -87,10 +98,13 @@ def method1(sample_path, model_cls):
 
     def on_feature(self, feature):
       self._feature = feature
-      self._should_enter_buy = self._should_enter_buy.predict(feature)
-      self._should_exit_buy = self._should_exit_buy.predict(feature)
-      self._should_enter_sell = self._should_enter_sell.predict(feature)
-      self._should_exit_sell = self._should_exit_sell.predict(feature)
+      if np.any(np.isnan(feature)):
+        return
+      feature = [feature]
+      self._should_enter_buy = self._enter_buy_model.predict(feature)
+      self._should_exit_buy = self._exit_buy_model.predict(feature)
+      self._should_enter_sell = self._enter_sell_model.predict(feature)
+      self._should_exit_sell = self._exit_sell_model.predict(feature)
 
     def should_enter_buy(self):
       return self._should_enter_buy and not self._should_exit_buy and \
@@ -111,16 +125,19 @@ def method1(sample_path, model_cls):
     'Okex', 'ETH', 'USD', 20190329,
     [20190128, 20190129],
     MySignals(buy_enter_model, buy_exit_model, sell_enter_model, sell_exit_model))
+  add_samplers_features(backtest)
   backtest.start()
 
 
 def main(argv):
   assert FLAGS.output_path
   output_path = FLAGS.output_path
-  #extract_feature_reward(output_path)
+  extract_feature_reward(output_path)
   #return
   from model.svm_classifier import SvmClassifier
-  method1(output_path, SvmClassifier)
+  from model.sequential import SequentialClassifier
+  #method1(output_path, SvmClassifier)
+  method1(output_path, SequentialClassifier)
   return
 
 
