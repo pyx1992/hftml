@@ -15,7 +15,7 @@ class TimedDeque(object):
     return timestamp - self._dq[0][0] > multiplier * self._timewindow
 
   def update(self, timestamp):
-    if timestamp > 0:
+    if self._timewindow > 0:
       while len(self._dq) > 0 and self._dq[0][0] + self._timewindow < timestamp:
         self._dq.popleft()
 
