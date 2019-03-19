@@ -1,6 +1,8 @@
 # 2019
 # author: yuxuan
 
+import pickle
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -26,6 +28,14 @@ class SvmClassifier(object):
 
   def predict(self, x):
     return self._model.predict(x)
+
+  def save_model(self, save_path):
+    with open(save_path, 'wb') as fd:
+      pickle.dump(self._model, fd)
+
+  def load_model(self, load_path):
+    with open(load_path, 'rb') as fl:
+      self._model = pickle.load(fl)
 
 
 if __name__ == '__main__':

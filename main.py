@@ -17,21 +17,29 @@ flags.DEFINE_string(
     'output_path',
     '',
     '')
+flags.DEFINE_string(
+    'save_path',
+    '',
+    '')
+flags.DEFINE_string(
+    'load_path',
+    '',
+    '')
 
 
 def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
   #researcher.add_samplers(PriceChangedSampler(5))
-  researcher.add_samplers(LargeTradeSampler(180, 2))
+  researcher.add_samplers(LargeTradeSampler(180, 0.7))
 
   researcher.add_feature(SnapshotBookFeature(2))
   researcher.add_feature(TimedVwapFeature(1 * 60))
   researcher.add_feature(TimedVwapFeature(2 * 60))
   researcher.add_feature(TimedVwapFeature(5 * 60))
   researcher.add_feature(TimedVwapFeature(10 * 60))
-  researcher.add_feature(ArFeature(StepBookFeature(), 3))
-  researcher.add_feature(ArFeature(StepVwapFeature(), 3))
+  researcher.add_feature(ArFeature(StepBookFeature(), 2))
+  researcher.add_feature(ArFeature(StepVwapFeature(), 2))
   researcher.add_feature(ArFeature(StepTradeFeature(), 2))
   researcher.add_feature(ArFeature(StepVolumeFeature(), 2))
 
@@ -129,20 +137,25 @@ def method1(sample_path, classifier_cls):
 
 
 def method2(sample_path, regressor_cls):
-  df = pd.read_csv(sample_path)
-  df = filter_nan(df)
-  y_col = df.columns[-1]
-  y = df.pop(y_col)
-
   model = regressor_cls()
-  model.train_model(df, y)
 
-  y_hat = model.predict(df)
-  y_hat = pd.DataFrame(y_hat)
-  #print(df)
-  print(y_hat)
-  print(y_hat[0].value_counts())
-  #print(y_hat.describe())
+  if FLAGS.load_path:
+    model.load_model(FLAGS.load_path)
+  else:
+    df = pd.read_csv(sample_path)
+    df = filter_nan(df)
+    y_col = df.columns[-1]
+    y = df.pop(y_col)
+    model.train_model(df, y)
+    y_hat = model.predict(df)
+    y_hat = pd.DataFrame(y_hat)
+    #print(df)
+    print(y_hat)
+    print(y_hat[0].value_counts())
+    #print(y_hat.describe())
+    if FLAGS.save_path:
+      model.save_model(FLAGS.save_path)
+  #return
 
   class MySignals(Signals):
     def __init__(self, model, enter_threshold, exit_threshold):
@@ -174,7 +187,7 @@ def method2(sample_path, regressor_cls):
 
   backtest = BacktestReseacher(
     'Okex', 'ETH', 'USD', 20190329, [20190128, 20190129],
-    MySignals(model, 6e-4, 3e-4))
+    MySignals(model, 3.5e-4, 1.5e-4))
   add_samplers_features(backtest)
   backtest.start()
 
@@ -182,7 +195,7 @@ def method2(sample_path, regressor_cls):
 def main(argv):
   assert FLAGS.output_path
   output_path = FLAGS.output_path
-  #extract_feature_reward(output_path)
+  extract_feature_reward(output_path)
   #return
   from model.svm_classifier import SvmClassifier
   from model.sequential import SequentialClassifier, SequentialRegressor

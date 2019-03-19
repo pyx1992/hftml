@@ -7,26 +7,6 @@ import pandas as pd
 import statsmodels.api as sm
 
 
-def regression(file_path):
-  df = pd.read_csv(file_path)
-  has_nan = np.any(pd.isnull(df), 1)
-  df = df[~has_nan]
-  y_idx = len(df.columns) - 1
-  y_df = df.pop(str(y_idx))
-  print(y_df.describe())
-  x_df = df
-  columns = x_df.columns
-  Xs = [x_df[col].tolist() for col in columns]
-  Xs = np.array(Xs).T
-  #Xs = sm.add_constant(Xs)
-  Y = y_df.tolist()
-
-  model = sm.OLS(Y, Xs)
-  result = model.fit()
-  print(result.summary())
-  return result, Xs, Y
-
-
 class LinearModelSignals(object):
   def __init__(
       self, olsres, enter_buy_threshold=None, enter_sell_threshold=None,
@@ -58,6 +38,26 @@ class LinearModelSignals(object):
 
   def should_exit_sell(self):
     return self._pred > self._exit_sell
+
+
+def regression(file_path):
+  df = pd.read_csv(file_path)
+  has_nan = np.any(pd.isnull(df), 1)
+  df = df[~has_nan]
+  y_idx = len(df.columns) - 1
+  y_df = df.pop(str(y_idx))
+  print(y_df.describe())
+  x_df = df
+  columns = x_df.columns
+  Xs = [x_df[col].tolist() for col in columns]
+  Xs = np.array(Xs).T
+  #Xs = sm.add_constant(Xs)
+  Y = y_df.tolist()
+
+  model = sm.OLS(Y, Xs)
+  result = model.fit()
+  print(result.summary())
+  return result, Xs, Y
 
 
 if __name__ == '__main__':

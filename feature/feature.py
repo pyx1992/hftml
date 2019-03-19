@@ -127,10 +127,12 @@ class TimedBookFeature(Feature):
   def __init__(self, timewindowsec):
     self._timewindow = timewindowsec * 10 ** 9
     self._dq = TimedDeque(self._timewindow)
+    self._last_book = None
 
   def on_feed(self, feed):
     if feed.feed_type == FeedType.BOOK:
       self._dq.append(feed.timestamp, feed)
+      self._last_book = feed
 
   def to_feature(self):
     features = []
@@ -147,7 +149,7 @@ class TimedBookFeature(Feature):
             (bids0[:-1,1] + asks0[:-1,1]) / 2.0 * (bids0[1:,0] - bids0[:-1,0])) \
             / duration
     else:
-      twmid = np.nan
+      twmid = (self._last_book.bids[0][0] + self._last_book.asks[0][0]) / 2.0
     features.append(np.log(twmid))
 
     # Time weighted bid ask spread.
@@ -160,7 +162,8 @@ class TimedBookFeature(Feature):
             (asks0[0,1] - bids0[0,1]) / (bids0[0,1] + asks0[0,1]) *
             (bids0[1:,0] - bids0[:-1,0])) / duration
     else:
-      twspread = np.nan
+      twspread = (self._last_book.asks[0][0] - self._last_book.bids[0][0]) / \
+          (self._last_book.asks[0][0] + self._last_book.bids[0][0])
     features.append(twspread)
 
     # Time weighted best level qty.
@@ -173,8 +176,8 @@ class TimedBookFeature(Feature):
         twbidq = np.sum(bids0[0,2] * (bids0[1:,0] - bids0[:-1,0]) / duration)
         twaskq = np.sum(asks0[0,2] * (asks0[1:,0] - asks0[:-1,0]) / duration)
     else:
-      twbidq = np.nan
-      twaskq = np.nan
+      twbidq = self._last_book.bids[0][1]
+      twaskq = self._last_book.asks[0][1]
     features += [np.log(twbidq), np.log(twaskq)]
 
     return features

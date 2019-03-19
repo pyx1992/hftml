@@ -66,7 +66,7 @@ class FeatureRewardResearcher(object):
       if self.ready():
         reward = self.get_reward()
         self.on_sampled(self._last_features, reward)
-      features = [np.log(feed.timestamp - self._last_sampled_ts)]
+      features = [np.log(feed.timestamp - self._last_sampled_ts + 0.1)]
       for feature in self._features:
         new_feature = feature.to_feature()
         assert isinstance(new_feature, list)
