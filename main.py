@@ -31,7 +31,7 @@ def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
   #researcher.add_samplers(PriceChangedSampler(5))
-  researcher.add_samplers(LargeTradeSampler(180, 1.0))
+  researcher.add_samplers(LargeTradeSampler(300, 1.0))
 
   researcher.add_feature(SnapshotBookFeature(2))
   researcher.add_feature(TimedVwapFeature(1 * 60))
@@ -137,7 +137,7 @@ def method1(sample_path, classifier_cls):
 
 
 def method2(sample_path, regressor_cls):
-  model = regressor_cls()
+  model = regressor_cls(epochs=150, lr=0.0001)
 
   if FLAGS.load_path:
     model.load_model(FLAGS.load_path)
@@ -153,7 +153,9 @@ def method2(sample_path, regressor_cls):
     print(y)
     print(y_hat)
     print(y_hat[0].value_counts())
-    #print(np.corrcoef(y, y_hat))
+    y.to_csv('test_y.csv', index=False)
+    y_hat.to_csv('test_yhat.csv', index=False)
+    print(np.corrcoef(y.tolist(), y_hat.iloc[:, 0].tolist()))
     #print(y_hat.describe())
     if FLAGS.save_path:
       model.save_model(FLAGS.save_path)
@@ -189,7 +191,7 @@ def method2(sample_path, regressor_cls):
 
   backtest = BacktestReseacher(
     'Okex', 'ETH', 'USD', 20190329, [20190128, 20190129],
-    MySignals(model, 2e-4, 1e-4))
+    MySignals(model, 5e-4, 2e-4))
   add_samplers_features(backtest)
   backtest.start()
 

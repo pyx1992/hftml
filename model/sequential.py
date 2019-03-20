@@ -42,16 +42,18 @@ class SequentialClassifier(object):
 
 
 class SequentialRegressor(object):
-  def __init__(self):
+  def __init__(self, epochs=10, lr=0.001):
     self._model = None
+    self._epochs = epochs
+    self._lr = lr
 
   def _build_model(self, input_shape):
     model = keras.Sequential([
-      layers.Dense(256, activation=tf.nn.relu, input_shape=[input_shape]),
-      layers.Dense(512, activation=tf.nn.relu),
+      layers.Dense(256, activation=tf.nn.leaky_relu, input_shape=[input_shape]),
+      layers.Dense(512, activation=tf.nn.leaky_relu),
       layers.Dense(1)
     ])
-    optimizer = tf.keras.optimizers.RMSprop(0.00015)
+    optimizer = tf.keras.optimizers.RMSprop(self._lr)
     model.compile(loss='mean_squared_error',
                   optimizer=optimizer,
                   metrics=['mean_absolute_error', 'mean_squared_error'])
@@ -60,7 +62,7 @@ class SequentialRegressor(object):
   def train_model(self, x, y):
     self._build_model(x.shape[1])
     X_train, X_test, y_train, y_test = train_test_split(x, y, train_size=0.8, random_state=42)
-    self._model.fit(X_train, y_train, epochs=40)
+    self._model.fit(X_train, y_train, epochs=self._epochs)
     loss, mae, mse = self._model.evaluate(X_test, y_test)
     print('Test loss, mae, mse: ', loss, mae, mse)
 
