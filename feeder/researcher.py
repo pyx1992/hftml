@@ -65,6 +65,8 @@ class FeatureRewardResearcher(object):
     if sampled:
       if self.ready():
         reward = self.get_reward()
+        if feed.timestamp == self._last_sampled_ts:
+          return
         self.on_sampled(self._last_features, reward)
       features = [np.log(feed.timestamp - self._last_sampled_ts + 0.1)]
       for feature in self._features:
@@ -75,6 +77,8 @@ class FeatureRewardResearcher(object):
       self._last_features = features
       self._last_sampled_book = self._current_book
       self._last_sampled_ts = feed.timestamp
+      for sampler in self._samplers:
+        sampler.other_sampled()
 
 
 class FeatureRewardExtractor(FeatureRewardResearcher):
@@ -113,6 +117,9 @@ class BacktestReseacher(FeatureRewardResearcher):
     self._cash = 0.0
     self._volume = 0.0
     self._pnl = 0.0
+    self._ts = []
+    self._pnls = []
+    self._volumes = []
 
   def on_sampled(self, feature, _):
     self._signals.on_feature(feature)
@@ -129,13 +136,13 @@ class BacktestReseacher(FeatureRewardResearcher):
 
     diff_pos = target_pos - self._position
     dt = datetime.datetime.fromtimestamp(self._current_book.timestamp * 1e-9)
-    #price = mid(self._current_book)
+    price = mid(self._current_book)
     if abs(diff_pos) > 1e-6:
       if diff_pos > 0:
-        price = self._current_book.asks[0][0]
+        #price = self._current_book.asks[0][0]
         print('Buy %f @ %f %s' % (abs(diff_pos), price, dt))
       else:
-        price = self._current_book.bids[0][0]
+        #price = self._current_book.bids[0][0]
         print('Sell %f @ %f %s' % (abs(diff_pos), price, dt))
       diff_cash = -diff_pos * price
       self._cash += diff_cash
@@ -143,8 +150,16 @@ class BacktestReseacher(FeatureRewardResearcher):
       self._volume += abs(diff_cash)
       self._pnl = self._cash + self._position * (
           self._current_book.bids[0][0] + self._current_book.asks[0][0]) / 2.0
+      self._ts.append(self._current_book.timestamp)
+      self._pnls.append(self._pnl)
+      self._volumes.append(self._volume)
       print('Pnl: %f, Volume: %f' % (self._pnl, self._volume))
 
   def on_completed(self):
     print('Total Pnl: %f' % self._pnl)
     print('Total Volume %f' % self._volume)
+    data = pd.DataFrame({
+      'timestamp': self._ts,
+      'pnl': self._pnls,
+      'volumes': self._volumes})
+    data.to_csv('sim_result.csv', index=False)

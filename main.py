@@ -30,24 +30,25 @@ flags.DEFINE_string(
 def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
-  #researcher.add_samplers(PriceChangedSampler(5))
-  researcher.add_samplers(LargeTradeSampler(300, 1.0))
+  researcher.add_samplers(PriceChangedSampler(20))
+  researcher.add_samplers(LargeTradeSampler(300, 0.5))
 
-  researcher.add_feature(SnapshotBookFeature(2))
+  researcher.add_feature(SnapshotBookFeature(3))
   researcher.add_feature(TimedVwapFeature(1 * 60))
   researcher.add_feature(TimedVwapFeature(2 * 60))
   researcher.add_feature(TimedVwapFeature(5 * 60))
   researcher.add_feature(TimedVwapFeature(10 * 60))
-  researcher.add_feature(ArFeature(StepBookFeature(), 2))
-  researcher.add_feature(ArFeature(StepVwapFeature(), 2))
-  researcher.add_feature(ArFeature(StepTradeFeature(), 2))
-  researcher.add_feature(ArFeature(StepVolumeFeature(), 2))
+  researcher.add_feature(ArFeature(StepBookFeature(), 3))
+  researcher.add_feature(ArFeature(StepVwapFeature(), 3))
+  researcher.add_feature(ArFeature(StepTradeFeature(), 3))
+  researcher.add_feature(ArFeature(StepVolumeFeature(), 3))
 
 
 def extract_feature_reward(output_path):
   extractor = FeatureRewardExtractor(
       'Okex', 'ETH', 'USD', 20190329,
-      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127],
+      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
+       20190128, 20190129, 20190130],
       output_path)
   add_samplers_features(extractor)
   extractor.start()
@@ -136,9 +137,7 @@ def method1(sample_path, classifier_cls):
   backtest.start()
 
 
-def method2(sample_path, regressor_cls):
-  model = regressor_cls(epochs=150, lr=0.0001)
-
+def method2(sample_path, model):
   if FLAGS.load_path:
     model.load_model(FLAGS.load_path)
   else:
@@ -153,13 +152,13 @@ def method2(sample_path, regressor_cls):
     print(y)
     print(y_hat)
     print(y_hat[0].value_counts())
-    y.to_csv('test_y.csv', index=False)
-    y_hat.to_csv('test_yhat.csv', index=False)
-    print(np.corrcoef(y.tolist(), y_hat.iloc[:, 0].tolist()))
-    #print(y_hat.describe())
+    #y.to_csv('test_y.csv', index=False)
+    #y_hat.to_csv('test_yhat.csv', index=False)
+    corr = np.corrcoef(y.tolist(), y_hat.iloc[:, 0].tolist())
+    print(corr)
+    print(y_hat.describe())
     if FLAGS.save_path:
       model.save_model(FLAGS.save_path)
-  #return
 
   class MySignals(Signals):
     def __init__(self, model, enter_threshold, exit_threshold):
@@ -175,7 +174,7 @@ def method2(sample_path, regressor_cls):
       self._feature = feature
       if np.any(np.isnan(feature)):
         return
-      self._pred = self._model.predict(feature)[0, 0]
+      self._pred = self._model.predict(feature)[0]
 
     def should_enter_buy(self):
       return self._pred > self._enter_threshold
@@ -190,8 +189,8 @@ def method2(sample_path, regressor_cls):
       return self._pred > self._exit_threshold
 
   backtest = BacktestReseacher(
-    'Okex', 'ETH', 'USD', 20190329, [20190128, 20190129],
-    MySignals(model, 5e-4, 2e-4))
+    'Okex', 'ETH', 'USD', 20190329, [20190131, 20190201, 20190202, 20190203],
+    MySignals(model, 1.9e-4, 0.5e-4))
   add_samplers_features(backtest)
   backtest.start()
 
@@ -199,36 +198,14 @@ def method2(sample_path, regressor_cls):
 def main(argv):
   assert FLAGS.output_path
   output_path = FLAGS.output_path
-  #extract_feature_reward(output_path)
-  #return
+  extract_feature_reward(output_path)
   from model.svm_classifier import SvmClassifier
   from model.sequential import SequentialClassifier, SequentialRegressor
+  from model.linear_model import LinearModel
   #method1(output_path, SvmClassifier)
   #method1(output_path, SequentialClassifier)
-  method2(output_path, SequentialRegressor)
-  return
-
-
-  from model.linear_model import regression, LinearModelSignals
-  olsres, Xs, Y = regression(FLAGS.output_path)
-  predict_y = olsres.predict(Xs)
-  enter_buy = np.percentile(predict_y, 99)
-  enter_sell = np.percentile(predict_y, 1)
-  exit_buy = np.percentile(predict_y, 30)
-  exit_sell = np.percentile(predict_y, 70)
-  print('enter buy:  %f' % enter_buy)
-  print('enter sell: %f' % enter_sell)
-  print('exit buy:   %f' % exit_buy)
-  print('exit sell:  %f' % exit_sell)
-  #return
-  lm_signals = LinearModelSignals(
-      olsres, enter_buy, enter_sell, exit_buy, exit_sell)
-  backtest = BacktestReseacher(
-      'Okex', 'ETH', 'USD', 20190329,
-      [20190128],
-      lm_signals)
-  add_samplers_features(backtest)
-  backtest.start()
+  method2(output_path, SequentialRegressor(epochs=50, lr=0.00015))
+  method2(output_path, LinearModel())
 
 
 if __name__ == '__main__':

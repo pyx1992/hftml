@@ -2,6 +2,7 @@
 # author: yuxuan
 
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
@@ -49,7 +50,7 @@ class SequentialRegressor(object):
 
   def _build_model(self, input_shape):
     model = keras.Sequential([
-      layers.Dense(256, activation=tf.nn.leaky_relu, input_shape=[input_shape]),
+      layers.Dense(512, activation=tf.nn.leaky_relu, input_shape=[input_shape]),
       layers.Dense(512, activation=tf.nn.leaky_relu),
       layers.Dense(1)
     ])
@@ -64,11 +65,17 @@ class SequentialRegressor(object):
     X_train, X_test, y_train, y_test = train_test_split(x, y, train_size=0.8, random_state=42)
     self._model.fit(X_train, y_train, epochs=self._epochs)
     loss, mae, mse = self._model.evaluate(X_test, y_test)
+    y_train_hat = self.predict(X_train)
+    y_test_hat = self.predict(X_test)
+    y_train = pd.DataFrame({'y': y_train.tolist(), 'yhat': y_train_hat.tolist()})
+    y_test = pd.DataFrame({'y': y_test.tolist(), 'yhat': y_test_hat.tolist()})
+    y_train.to_csv('y_train.csv', index=False)
+    y_test.to_csv('y_test.csv', index=False)
     print('Test loss, mae, mse: ', loss, mae, mse)
 
   def predict(self, x):
     predictions = self._model.predict(x)
-    return predictions
+    return predictions[:,0]
 
   def save_model(self, save_path):
     self._model.save(save_path)

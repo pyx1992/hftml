@@ -11,6 +11,9 @@ class Sampler(object):
   def sampled(self, feed):
     raise NotImplementedError()
 
+  def other_sampled(self):
+    pass
+
 
 # Sampled if best levels of book are taken.
 class BestBookLevelTakenSampler(Sampler):
@@ -64,12 +67,18 @@ class FixedIntervalSampler(Sampler):
   def __init__(self, min_intervalsec):
     self._min_interval = min_intervalsec * 10 ** 9
     self._last_sampled_ts = 0
+    self._last_feed = None
 
   def sampled(self, feed):
+    sampled = False
     if feed.timestamp - self._last_sampled_ts >= self._min_interval:
       self._last_sampled_ts = feed.timestamp
-      return True
-    return False
+      sampled = True
+    self._last_feed = feed
+    return sampled
+
+  def other_sampled(self):
+    self._last_sampled_ts = self._last_feed.timestamp
 
 
 # Sampled if price changed beyond threshold.
@@ -77,11 +86,18 @@ class PriceChangedSampler(Sampler):
   def __init__(self, threshold_bp):
     self._threshold = threshold_bp * 1e-4
     self._ref_mid_price = 0
+    self._last_book = None
 
   def sampled(self, feed):
+    sampled = False
     if feed.feed_type == FeedType.BOOK:
       mid = (feed.bids[0][0] + feed.asks[0][0]) / 2.0
       if abs(mid - self._ref_mid_price) > self._ref_mid_price * self._threshold:
         self._ref_mid_price = mid
-        return True
-    return False
+        sampled = True
+      self._last_book = feed
+    return sampled
+
+  def other_sampled(self):
+    self._ref_mid_price = (
+        self._last_book.bids[0][0] + self._last_book.asks[0][0]) / 2.0

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 import statsmodels.api as sm
+from sklearn.model_selection import train_test_split
 
 
 class LinearModelSignals(object):
@@ -40,25 +41,27 @@ class LinearModelSignals(object):
     return self._pred > self._exit_sell
 
 
-def regression(file_path):
-  df = pd.read_csv(file_path)
-  has_nan = np.any(pd.isnull(df), 1)
-  df = df[~has_nan]
-  y_idx = len(df.columns) - 1
-  y_df = df.pop(str(y_idx))
-  print(y_df.describe())
-  x_df = df
-  columns = x_df.columns
-  Xs = [x_df[col].tolist() for col in columns]
-  Xs = np.array(Xs).T
-  #Xs = sm.add_constant(Xs)
-  Y = y_df.tolist()
+class LinearModel(object):
+  def __init__(self):
+    self._result = None
 
-  model = sm.OLS(Y, Xs)
-  result = model.fit()
-  print(result.summary())
-  return result, Xs, Y
+  def train_model(self, x, y):
+    X_train, X_test, y_train, y_test = train_test_split(x, y, train_size=0.8, random_state=42)
+    X_train = sm.add_constant(X_train)
+    model = sm.OLS(y_train, X_train)
+    self._result = model.fit()
+    print(self._result.summary())
+    y_hat = self._result.predict(X_train)
+    y_test_hat = self._result.predict(sm.add_constant(X_test))
+    print('test y corr:', np.corrcoef(y_test, y_test_hat))
+    y = pd.DataFrame({'y': y_train.tolist(), 'yhat': y_hat.tolist()})
+    y_test = pd.DataFrame({'y': y_test.tolist(), 'yhat': y_test_hat.tolist()})
+    y.to_csv('lm_y.csv', index=False)
+    y_test.to_csv('lm_y_test.csv', index=False)
 
-
-if __name__ == '__main__':
-  regression()
+  def predict(self, x):
+    xnew = sm.add_constant(x)
+    if x.shape == xnew.shape:
+      assert x.ndim == 2
+      xnew = np.insert(x, 0, values=1, axis=1)
+    return self._result.predict(xnew)
