@@ -101,3 +101,20 @@ class PriceChangedSampler(Sampler):
   def other_sampled(self):
     self._ref_mid_price = (
         self._last_book.bids[0][0] + self._last_book.asks[0][0]) / 2.0
+
+
+class FixedQuantitySampler(Sampler):
+  def __init__(self, qty):
+    self._qty = qty
+    self._acc_qty = 0.0
+
+  def sampled(self, feed):
+    sampled = False
+    if feed.feed_type == FeedType.TRADE:
+      self._acc_qty += feed.qty
+      if self._acc_qty >= self._qty:
+        sampled = True
+    return sampled
+
+  def other_sampled(self):
+    self._acc_qty = 0.0

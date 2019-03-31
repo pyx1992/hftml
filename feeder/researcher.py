@@ -28,6 +28,7 @@ class FeatureRewardResearcher(object):
     self._current_book = None
     self._last_features = None
     self._last_sampled_ts = np.nan
+    self._columns = ['interval length']
 
   def add_samplers(self, sampler):
     self._samplers.append(sampler)
@@ -42,6 +43,8 @@ class FeatureRewardResearcher(object):
     raise NotImplementedError()
 
   def start(self):
+    for f in self._features:
+      self._columns += f.feature_names()
     self._feeder.start_feed()
     self.on_completed()
 
@@ -92,7 +95,8 @@ class FeatureRewardExtractor(FeatureRewardResearcher):
 
   def on_completed(self):
     df = pd.DataFrame(self._feature_reward)
-    df.to_csv(self._output_path, index=False)
+    columns = self._columns + ['y']
+    df.to_csv(self._output_path, index=False, header=columns)
 
 
 class Signals(object):

@@ -30,8 +30,9 @@ flags.DEFINE_string(
 def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
-  researcher.add_samplers(PriceChangedSampler(20))
-  researcher.add_samplers(LargeTradeSampler(300, 0.5))
+  #researcher.add_samplers(PriceChangedSampler(20))
+  #researcher.add_samplers(LargeTradeSampler(300, 0.5))
+  researcher.add_samplers(FixedQuantitySampler(1000))
 
   researcher.add_feature(SnapshotBookFeature(3))
   researcher.add_feature(TimedVwapFeature(1 * 60))
@@ -47,8 +48,7 @@ def add_samplers_features(researcher):
 def extract_feature_reward(output_path):
   extractor = FeatureRewardExtractor(
       'Okex', 'ETH', 'USD', 20190329,
-      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
-       20190128, 20190129, 20190130],
+      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127],
       output_path)
   add_samplers_features(extractor)
   extractor.start()
@@ -187,9 +187,10 @@ def method2(sample_path, model):
 
     def should_exit_sell(self):
       return self._pred > self._exit_threshold
+  #return
 
   backtest = BacktestReseacher(
-    'Okex', 'ETH', 'USD', 20190329, [20190131, 20190201, 20190202, 20190203],
+    'Okex', 'ETH', 'USD', 20190329, [20190128],
     MySignals(model, 1.9e-4, 0.5e-4))
   add_samplers_features(backtest)
   backtest.start()
@@ -204,7 +205,7 @@ def main(argv):
   from model.linear_model import LinearModel
   #method1(output_path, SvmClassifier)
   #method1(output_path, SequentialClassifier)
-  method2(output_path, SequentialRegressor(epochs=50, lr=0.00015))
+  method2(output_path, SequentialRegressor(epochs=50, lr=0.0001))
   method2(output_path, LinearModel())
 
 

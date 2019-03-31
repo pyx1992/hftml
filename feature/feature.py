@@ -13,6 +13,9 @@ from util.math import sigmoid
 
 
 class Feature(object):
+  def feature_names(self):
+    raise NotImplementedError()
+
   def on_feed(self, feed):
     raise NotImplementedError()
 
@@ -28,6 +31,12 @@ class ArFeature(Feature):
     self._feature = feature
     self._ar_steps = ar_steps
     self._dq = deque(maxlen=ar_steps + 1)
+
+  def feature_names(self):
+    names = []
+    for i in range(self._ar_steps + 1):
+      names += ['ar_%d %s' % (i, n) for n in self._feature.feature_names()]
+    return names
 
   def on_feed(self, feed):
     self._feature.on_feed(feed)
@@ -88,6 +97,16 @@ class SnapshotBookFeature(Feature):
     bs_overwhelm_ratio = (delta_bid - delta_ask) / (old_bid + old_ask)
     return bs_overwhelm_ratio
 
+  def feature_names(self):
+    names = []
+    names.append('snb book spread')
+    for i in range(self._levels):
+      names.append('snb book imbalance %d' % (i + 1))
+    names.append('snb mid price')
+    for i in range(self._levels):
+      names.append('snb vw mid price %d' % (i + 1))
+    return names
+
   def to_feature(self):
     features = []
     # Bid-ask spread
@@ -100,9 +119,9 @@ class SnapshotBookFeature(Feature):
     for i in range(self._levels):
       bid_qty.append(self._book.bids[i][1])
       ask_qty.append(self._book.asks[i][1])
-    total_bid = sum(bid_qty)
-    total_ask = sum(ask_qty)
-    features += [(total_bid - total_ask) / (total_bid + total_ask)]
+      total_bid = sum(bid_qty)
+      total_ask = sum(ask_qty)
+      features += [(total_bid - total_ask) / (total_bid + total_ask)]
 
     # Buy-sell overwhelming ratio
     #features += [self._get_delta_book_imbalance()]
@@ -113,9 +132,10 @@ class SnapshotBookFeature(Feature):
     # Volume weighted mid price
     a, b = 0.0, 0.0
     for i in range(self._levels):
-      a += 1.0 * self._book.bids[i][0] / self._book.bids[i][1] + \
-          1.0 * self._book.asks[i][0] / self._book.asks[i][1]
-      b += 1.0 / self._book.bids[i][1] + 1.0 / self._book.asks[i][1]
+      wbid = 1.0 / self._book.bids[i][1]
+      wask = 1.0 / self._book.asks[i][1]
+      a += self._book.bids[i][0] * wbid + self._book.asks[i][0] * wask
+      b += wbid + wask
       features += [np.log(a / b)]
     return features
 
@@ -133,6 +153,13 @@ class TimedBookFeature(Feature):
     if feed.feed_type == FeedType.BOOK:
       self._dq.append(feed.timestamp, feed)
       self._last_book = feed
+
+  def feature_names(self):
+    names = []
+    names.append('tb tw mid price')
+    names.append('tb tw book spread')
+    names += ['tb tw best bid qty', 'tb tw best ask qty']
+    return names
 
   def to_feature(self):
     features = []
@@ -190,6 +217,9 @@ class StepBookFeature(TimedBookFeature):
   def __init__(self):
     TimedBookFeature.__init__(self, -1)
 
+  def feature_names(self):
+    return ['sb %s' % n.split(' ', 1)[1] for n in TimedBookFeature.feature_names(self)]
+
   def reset(self):
     self._dq.clear()
 
@@ -205,6 +235,9 @@ class TimedVwapFeature(Feature):
       self._dq.append(feed.timestamp, (feed.price, feed.qty))
     else:
       self._book = feed
+
+  def feature_names(self):
+    return ['tt vwap']
 
   def to_feature(self):
     if not self._dq.empty():
@@ -226,6 +259,9 @@ class StepVwapFeature(TimedVwapFeature):
   def __init__(self):
     TimedVwapFeature.__init__(self, -1)
 
+  def feature_names(self):
+    return ['st %s' % n.split(' ', 1)[1] for n in TimedVwapFeature.feature_names(self)]
+
   def reset(self):
     self._dq.clear()
 
@@ -238,6 +274,13 @@ class TimedTradeFeature(Feature):
   def on_feed(self, feed):
     if feed.feed_type == FeedType.TRADE:
       self._dq.append(feed.timestamp, (feed.price, feed.qty, feed.side))
+
+  def feature_names(self):
+    names = []
+    names += ['tt qty imbalance', 'tt cnt imbalance']
+    names += [
+        'tt total buy', 'tt totol sell', 'tt total buy cnt', 'tt total sell cnt']
+    return names
 
   def to_feature(self):
     features = []
@@ -274,6 +317,9 @@ class StepTradeFeature(TimedTradeFeature):
   def __init__(self):
     TimedTradeFeature.__init__(self, -1)
 
+  def feature_names(self):
+    return ['st %s' % n.split(' ', 1)[1] for n in TimedTradeFeature.feature_names(self)]
+
   def reset(self):
     self._dq.clear()
 
@@ -286,6 +332,12 @@ class TimedVolumeFeature(Feature):
   def on_feed(self, feed):
     if feed.feed_type == FeedType.TRADE:
       self._dq.append(feed.timestamp, feed.qty)
+
+  def feature_names(self):
+    names = []
+    names += ['tt mean trade qty', 'tt std trade qty']
+    names.append('tt trade cnt')
+    return names
 
   def to_feature(self):
     features = []
@@ -310,6 +362,9 @@ class TimedVolumeFeature(Feature):
 class StepVolumeFeature(TimedVolumeFeature):
   def __init__(self):
     TimedVolumeFeature.__init__(self, -1)
+
+  def feature_names(self):
+    return ['st %s' % n.split(' ', 1)[1] for n in TimedVolumeFeature.feature_names(self)]
 
   def reset(self):
     self._dq.clear()
