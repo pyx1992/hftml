@@ -3,6 +3,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
 from absl import app, flags
 
 from sampler.sampler import *
@@ -32,7 +33,7 @@ def add_samplers_features(researcher):
   #researcher.add_samplers(FixedIntervalSampler(5))
   #researcher.add_samplers(PriceChangedSampler(20))
   #researcher.add_samplers(LargeTradeSampler(300, 0.5))
-  researcher.add_samplers(FixedQuantitySampler(1000))
+  researcher.add_samplers(FixedQuantitySampler(200))
 
   researcher.add_feature(SnapshotBookFeature(3))
   researcher.add_feature(TimedVwapFeature(1 * 60))
@@ -145,6 +146,8 @@ def method2(sample_path, model):
     df = filter_nan(df)
     y_col = df.columns[-1]
     y = df.pop(y_col)
+    #y = (y - np.mean(y)) / np.std(y)
+    #y = norm.cdf(y, loc=np.mean(y), scale=np.std(y))
     model.train_model(df, y)
     y_hat = model.predict(df)
     y_hat = pd.DataFrame(y_hat)
@@ -187,11 +190,15 @@ def method2(sample_path, model):
 
     def should_exit_sell(self):
       return self._pred > self._exit_threshold
+
+  enter_threshold = np.percentile(y_hat, 98)
+  exit_threshold = -np.percentile(y_hat, 30)
+  print(enter_threshold, exit_threshold)
   #return
 
   backtest = BacktestReseacher(
     'Okex', 'ETH', 'USD', 20190329, [20190128],
-    MySignals(model, 1.9e-4, 0.5e-4))
+    MySignals(model, enter_threshold, exit_threshold))
   add_samplers_features(backtest)
   backtest.start()
 
@@ -199,13 +206,13 @@ def method2(sample_path, model):
 def main(argv):
   assert FLAGS.output_path
   output_path = FLAGS.output_path
-  extract_feature_reward(output_path)
+  #extract_feature_reward(output_path)
   from model.svm_classifier import SvmClassifier
   from model.sequential import SequentialClassifier, SequentialRegressor
   from model.linear_model import LinearModel
   #method1(output_path, SvmClassifier)
   #method1(output_path, SequentialClassifier)
-  method2(output_path, SequentialRegressor(epochs=50, lr=0.0001))
+  #method2(output_path, SequentialRegressor(epochs=50, lr=0.0001))
   method2(output_path, LinearModel())
 
 
