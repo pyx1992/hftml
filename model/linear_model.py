@@ -56,7 +56,7 @@ class LinearModel(object):
     print('test y corr:', np.corrcoef(y_test, y_test_hat))
     y = pd.DataFrame({'y': y_train.tolist(), 'yhat': y_hat.tolist()})
     y_test = pd.DataFrame({'y': y_test.tolist(), 'yhat': y_test_hat.tolist()})
-    y.to_csv('lm_y.csv', index=False)
+    y.to_csv('lm_y_train.csv', index=False)
     y_test.to_csv('lm_y_test.csv', index=False)
 
   def predict(self, x):
