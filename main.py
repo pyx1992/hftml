@@ -31,19 +31,20 @@ flags.DEFINE_string(
 def add_samplers_features(researcher):
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
-  #researcher.add_samplers(PriceChangedSampler(20))
+  #researcher.add_samplers(PriceChangedSampler(10))
   #researcher.add_samplers(LargeTradeSampler(300, 0.5))
-  researcher.add_samplers(FixedQuantitySampler(200))
+  researcher.add_samplers(FixedQuantitySampler(1000))
 
   researcher.add_feature(SnapshotBookFeature(3))
-  researcher.add_feature(TimedVwapFeature(1 * 60))
-  researcher.add_feature(TimedVwapFeature(2 * 60))
-  researcher.add_feature(TimedVwapFeature(5 * 60))
-  researcher.add_feature(TimedVwapFeature(10 * 60))
-  researcher.add_feature(ArFeature(StepBookFeature(), 3))
-  researcher.add_feature(ArFeature(StepVwapFeature(), 3))
-  researcher.add_feature(ArFeature(StepTradeFeature(), 3))
-  researcher.add_feature(ArFeature(StepVolumeFeature(), 3))
+  researcher.add_feature(TimedVwapFeature(2))
+  researcher.add_feature(TimedVwapFeature(5))
+  researcher.add_feature(TimedVwapFeature(10))
+  researcher.add_feature(TimedVwapFeature(30))
+  researcher.add_feature(TimedVwapFeature(60))
+  researcher.add_feature(ArFeature(StepBookFeature(), 2))
+  researcher.add_feature(ArFeature(StepVwapFeature(), 2))
+  researcher.add_feature(ArFeature(StepTradeFeature(), 2))
+  researcher.add_feature(ArFeature(StepVolumeFeature(), 2))
 
 
 def extract_feature_reward(output_path):
@@ -139,29 +140,32 @@ def method1(sample_path, classifier_cls):
 
 
 def method2(sample_path, model):
+  df = pd.read_csv(sample_path)
+  df = filter_nan(df)
+
+  df = norm(df, df.describe().transpose())
+
+  y_col = df.columns[-1]
+  y = df.pop(y_col)
+  print(y.describe())
+
   if FLAGS.load_path:
     model.load_model(FLAGS.load_path)
   else:
-    df = pd.read_csv(sample_path)
-    df = filter_nan(df)
-    y_col = df.columns[-1]
-    y = df.pop(y_col)
-    #y = (y - np.mean(y)) / np.std(y)
-    #y = norm.cdf(y, loc=np.mean(y), scale=np.std(y))
     model.train_model(df, y)
-    y_hat = model.predict(df)
-    y_hat = pd.DataFrame(y_hat)
-    #print(df)
-    print(y)
-    print(y_hat)
-    print(y_hat[0].value_counts())
-    #y.to_csv('test_y.csv', index=False)
-    #y_hat.to_csv('test_yhat.csv', index=False)
-    corr = np.corrcoef(y.tolist(), y_hat.iloc[:, 0].tolist())
-    print(corr)
-    print(y_hat.describe())
-    if FLAGS.save_path:
-      model.save_model(FLAGS.save_path)
+  y_hat = model.predict(df)
+  y_hat = pd.DataFrame(y_hat)
+  #print(df)
+  print(y)
+  print(y_hat)
+  print(y_hat[0].value_counts())
+  #y.to_csv('test_y.csv', index=False)
+  #y_hat.to_csv('test_yhat.csv', index=False)
+  corr = np.corrcoef(y.tolist(), y_hat.iloc[:, 0].tolist())
+  print('overall corr:', corr)
+  print(y_hat.describe())
+  if FLAGS.save_path:
+    model.save_model(FLAGS.save_path)
 
   class MySignals(Signals):
     def __init__(self, model, enter_threshold, exit_threshold):
@@ -191,29 +195,49 @@ def method2(sample_path, model):
     def should_exit_sell(self):
       return self._pred > self._exit_threshold
 
-  enter_threshold = np.percentile(y_hat, 98)
-  exit_threshold = -np.percentile(y_hat, 30)
+  enter_threshold = np.percentile(y_hat, 90)
+  exit_threshold = -np.percentile(y_hat, 40)
   print(enter_threshold, exit_threshold)
   #return
 
   backtest = BacktestReseacher(
-    'Okex', 'ETH', 'USD', 20190329, [20190128],
+    'Okex', 'ETH', 'USD', 20190329, [20190128,20190129],
     MySignals(model, enter_threshold, exit_threshold))
   add_samplers_features(backtest)
   backtest.start()
+
+
+def method3():
+  df = pd.read_csv(sample_path)
+  df = filter_nan(df)
+
+  df = norm(df, df.describe().transpose())
+
+  y_col = df.columns[-1]
+  y = df.pop(y_col)
+  print(y.describe())
+
+  model.train_model(df, y)
+  y_hat = model.predict(df)
+
+
+
+def norm(df, stat):
+  return (df - stat['mean']) / stat['std']
 
 
 def main(argv):
   assert FLAGS.output_path
   output_path = FLAGS.output_path
   #extract_feature_reward(output_path)
+  #return
   from model.svm_classifier import SvmClassifier
   from model.sequential import SequentialClassifier, SequentialRegressor
   from model.linear_model import LinearModel
   #method1(output_path, SvmClassifier)
   #method1(output_path, SequentialClassifier)
-  #method2(output_path, SequentialRegressor(epochs=50, lr=0.0001))
-  method2(output_path, LinearModel())
+  method2(output_path, SequentialRegressor(epochs=15, lr=0.001))
+  #method2(output_path, LinearModel())
 
 
 if __name__ == '__main__':

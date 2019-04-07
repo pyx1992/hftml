@@ -102,12 +102,14 @@ class SnapshotBookFeature(Feature):
     names.append('snb book spread')
     for i in range(self._levels):
       names.append('snb book imbalance %d' % (i + 1))
-    names.append('snb mid price')
     for i in range(self._levels):
-      names.append('snb vw mid price %d' % (i + 1))
+      names.append('snb vw mid price diff %d' % (i + 1))
     return names
 
   def to_feature(self):
+    current_mid = (self._book.bids[0][0] + self._book.asks[0][0]) / 2.0
+    log_current_mid = np.log(current_mid)
+
     features = []
     # Bid-ask spread
     features += [(self._book.asks[0][0] - self._book.bids[0][0]) /
@@ -126,17 +128,14 @@ class SnapshotBookFeature(Feature):
     # Buy-sell overwhelming ratio
     #features += [self._get_delta_book_imbalance()]
 
-    # Current mid price
-    features += [np.log((self._book.bids[0][0] + self._book.asks[0][0]) / 2.0)]
-
-    # Volume weighted mid price
+    # Volume weighted mid price - current mid
     a, b = 0.0, 0.0
     for i in range(self._levels):
       wbid = 1.0 / self._book.bids[i][1]
       wask = 1.0 / self._book.asks[i][1]
       a += self._book.bids[i][0] * wbid + self._book.asks[i][0] * wask
       b += wbid + wask
-      features += [np.log(a / b)]
+      features += [np.log(a / b) - log_current_mid]
     return features
 
   def reset(self):
@@ -158,10 +157,13 @@ class TimedBookFeature(Feature):
     names = []
     names.append('tb tw mid price')
     names.append('tb tw book spread')
-    names += ['tb tw best bid qty', 'tb tw best ask qty']
+    names += ['tb tw best bid ask imbalance']
     return names
 
   def to_feature(self):
+    current_mid = (self._last_book.bids[0][0] + self._last_book.asks[0][0]) / 2.0
+    log_current_mid = np.log(current_mid)
+
     features = []
     bids0 = np.array([[data[0]] + list(data[1].bids[0]) for data in self._dq.data()])
     asks0 = np.array([[data[0]] + list(data[1].asks[0]) for data in self._dq.data()])
@@ -177,7 +179,7 @@ class TimedBookFeature(Feature):
             / duration
     else:
       twmid = (self._last_book.bids[0][0] + self._last_book.asks[0][0]) / 2.0
-    features.append(np.log(twmid))
+    features.append(np.log(twmid) - log_current_mid)
 
     # Time weighted bid ask spread.
     if bids0.shape[0] > 0:
@@ -193,7 +195,7 @@ class TimedBookFeature(Feature):
           (self._last_book.asks[0][0] + self._last_book.bids[0][0])
     features.append(twspread)
 
-    # Time weighted best level qty.
+    # Time weighted best level imbalance.
     if bids0.shape[0] > 0:
       duration = bids0[-1,0] - bids0[0,0]
       if duration == 0:
@@ -205,7 +207,7 @@ class TimedBookFeature(Feature):
     else:
       twbidq = self._last_book.bids[0][1]
       twaskq = self._last_book.asks[0][1]
-    features += [np.log(twbidq), np.log(twaskq)]
+    features += [(twbidq - twaskq) / (twbidq + twaskq)]
 
     return features
 
@@ -240,6 +242,9 @@ class TimedVwapFeature(Feature):
     return ['tt vwap']
 
   def to_feature(self):
+    current_mid = (self._book.bids[0][0] + self._book.asks[0][0]) / 2.0
+    log_current_mid = np.log(current_mid)
+
     if not self._dq.empty():
       dq = self._dq.data()
       total = 0.0
@@ -248,7 +253,7 @@ class TimedVwapFeature(Feature):
         total += e[1][0] * e[1][1]
         qty += e[1][1]
       v = total / qty
-      return [np.log(v)]
+      return [np.log(v) - log_current_mid]
     return [np.nan]
 
   def reset(self):
@@ -278,8 +283,6 @@ class TimedTradeFeature(Feature):
   def feature_names(self):
     names = []
     names += ['tt qty imbalance', 'tt cnt imbalance']
-    names += [
-        'tt total buy', 'tt totol sell', 'tt total buy cnt', 'tt total sell cnt']
     return names
 
   def to_feature(self):
@@ -304,9 +307,6 @@ class TimedTradeFeature(Feature):
     qty_imb = (total_buys - total_sells) / (total_buys + total_sells)
     cnt_imb = (count_buys - count_sells) / (count_buys + count_sells)
     features += [qty_imb, cnt_imb]
-    features += [np.log(total_buys), np.log(total_sells),
-                 np.log(count_buys), np.log(count_sells)]
-
     return features
 
   def reset(self):

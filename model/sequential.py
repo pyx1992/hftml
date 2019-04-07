@@ -50,9 +50,10 @@ class SequentialRegressor(object):
 
   def _build_model(self, input_shape):
     model = keras.Sequential([
-      layers.Dense(512, activation=tf.nn.leaky_relu, input_shape=[input_shape]),
-      layers.Dense(512, activation=tf.nn.leaky_relu),
-      layers.Dense(1)
+      layers.Dense(128, activation=tf.nn.relu, input_shape=[input_shape]),
+      layers.Dense(64, activation=tf.nn.relu),
+      layers.Dense(16, activation=tf.nn.relu),
+      layers.Dense(1, activation='linear')
     ])
     optimizer = tf.keras.optimizers.RMSprop(self._lr)
     model.compile(loss='mean_squared_error',
