@@ -3,7 +3,6 @@
 
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
 from absl import app, flags
 
 from sampler.sampler import *
@@ -41,16 +40,17 @@ def add_samplers_features(researcher):
   researcher.add_feature(TimedVwapFeature(10))
   researcher.add_feature(TimedVwapFeature(30))
   researcher.add_feature(TimedVwapFeature(60))
-  researcher.add_feature(ArFeature(StepBookFeature(), 4))
-  researcher.add_feature(ArFeature(StepVwapFeature(), 4))
-  researcher.add_feature(ArFeature(StepTradeFeature(), 4))
-  researcher.add_feature(ArFeature(StepVolumeFeature(), 4))
+  researcher.add_feature(ArFeature(StepBookFeature(), 3))
+  researcher.add_feature(ArFeature(StepVwapFeature(), 3))
+  researcher.add_feature(ArFeature(StepTradeFeature(), 3))
+  researcher.add_feature(ArFeature(StepVolumeFeature(), 3))
 
 
 def extract_feature_reward(output_path):
   extractor = FeatureRewardExtractor(
       'Okex', 'ETH', 'USD', 20190329,
-      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127],
+      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
+       20190128, 20190129, 20190130, 20190131, 20190201, 20190202, 20190203],
       output_path)
   add_samplers_features(extractor)
   extractor.start()
@@ -143,7 +143,9 @@ def method2(sample_path, model):
   df = pd.read_csv(sample_path)
   df = filter_nan(df)
 
-  df = norm(df, df.describe().transpose())
+  normalizer = None
+  #normalizer = Normalizer(df.describe().transpose())
+  #df = normalizer.normalize(df)
 
   y_col = df.columns[-1]
   y = df.pop(y_col)
@@ -195,35 +197,17 @@ def method2(sample_path, model):
     def should_exit_sell(self):
       return self._pred > self._exit_threshold
 
-  enter_threshold = np.percentile(y_hat, 95)
-  exit_threshold = -np.percentile(y_hat, 30)
+  enter_threshold = np.percentile(y_hat, 99)
+  exit_threshold = -np.percentile(y_hat, 10)
   print(enter_threshold, exit_threshold)
   #return
 
   backtest = BacktestReseacher(
-    'Okex', 'ETH', 'USD', 20190329, [20190128,20190129],
+    'Okex', 'ETH', 'USD', 20190329, [20190204,20190205],
     MySignals(model, enter_threshold, exit_threshold))
   add_samplers_features(backtest)
+  backtest.set_normalizer(normalizer)
   backtest.start()
-
-
-def method3():
-  df = pd.read_csv(sample_path)
-  df = filter_nan(df)
-
-  df = norm(df, df.describe().transpose())
-
-  y_col = df.columns[-1]
-  y = df.pop(y_col)
-  print(y.describe())
-
-  model.train_model(df, y)
-  y_hat = model.predict(df)
-
-
-
-def norm(df, stat):
-  return (df - stat['mean']) / stat['std']
 
 
 def main(argv):

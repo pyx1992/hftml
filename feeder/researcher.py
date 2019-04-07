@@ -13,6 +13,19 @@ def mid(book):
   return (book.bids[0][0] + book.asks[0][0]) / 2.0
 
 
+class Normalizer(object):
+  def __init__(self, stat):
+    self._stat = stat
+
+  def normalize(self, df):
+    if isinstance(df, list):
+      for i in range(len(df)):
+        df[i] = (df[i] - self._stat.iloc[i]['mean']) / self._stat.iloc[i]['std']
+      return df
+    else:
+      return (df - self._stat['mean']) / self._stat['std']
+
+
 class FeatureRewardResearcher(object):
   def __init__(self, exchange, base, quote, expiry, dates):
     self._exchange = exchange
@@ -29,6 +42,10 @@ class FeatureRewardResearcher(object):
     self._last_features = None
     self._last_sampled_ts = np.nan
     self._columns = ['interval length']
+    self._normalizer = None
+
+  def set_normalizer(self, normalizer):
+    self._normalizer = normalizer
 
   def add_samplers(self, sampler):
     self._samplers.append(sampler)
@@ -124,8 +141,11 @@ class BacktestReseacher(FeatureRewardResearcher):
     self._ts = []
     self._pnls = []
     self._volumes = []
+    self._ys = []
 
   def on_sampled(self, feature, _):
+    if self._normalizer:
+      feature = self._normalizer.normalize(feature)
     self._signals.on_feature(feature)
     target_pos = self._position
     if self._signals.should_enter_buy():
@@ -157,13 +177,16 @@ class BacktestReseacher(FeatureRewardResearcher):
       self._ts.append(self._current_book.timestamp)
       self._pnls.append(self._pnl)
       self._volumes.append(self._volume)
-      print('Pnl: %f, Volume: %f' % (self._pnl, self._volume))
+      print('Pnl: %f, Volume: %f, Pos: %f' %
+            (self._pnl, self._volume, self._position))
 
   def on_completed(self):
+    pd.DataFrame(self._back_features, columns=self._columns).to_csv(
+        'backtest_feature.csv', index=False)
     print('Total Pnl: %f' % self._pnl)
     print('Total Volume %f' % self._volume)
     data = pd.DataFrame({
-      'timestamp': self._ts,
-      'pnl': self._pnls,
-      'volumes': self._volumes})
+        'timestamp': self._ts,
+        'pnl': self._pnls,
+        'volumes': self._volumes})
     data.to_csv('sim_result.csv', index=False)

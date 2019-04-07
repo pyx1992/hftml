@@ -239,7 +239,7 @@ class TimedVwapFeature(Feature):
       self._book = feed
 
   def feature_names(self):
-    return ['tt vwap']
+    return ['tt vwap %.1f' % (self._timewindow * 1e-9)]
 
   def to_feature(self):
     current_mid = (self._book.bids[0][0] + self._book.asks[0][0]) / 2.0
