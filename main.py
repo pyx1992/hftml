@@ -41,10 +41,10 @@ def add_samplers_features(researcher):
   researcher.add_feature(TimedVwapFeature(10))
   researcher.add_feature(TimedVwapFeature(30))
   researcher.add_feature(TimedVwapFeature(60))
-  researcher.add_feature(ArFeature(StepBookFeature(), 2))
-  researcher.add_feature(ArFeature(StepVwapFeature(), 2))
-  researcher.add_feature(ArFeature(StepTradeFeature(), 2))
-  researcher.add_feature(ArFeature(StepVolumeFeature(), 2))
+  researcher.add_feature(ArFeature(StepBookFeature(), 4))
+  researcher.add_feature(ArFeature(StepVwapFeature(), 4))
+  researcher.add_feature(ArFeature(StepTradeFeature(), 4))
+  researcher.add_feature(ArFeature(StepVolumeFeature(), 4))
 
 
 def extract_feature_reward(output_path):
@@ -195,8 +195,8 @@ def method2(sample_path, model):
     def should_exit_sell(self):
       return self._pred > self._exit_threshold
 
-  enter_threshold = np.percentile(y_hat, 90)
-  exit_threshold = -np.percentile(y_hat, 40)
+  enter_threshold = np.percentile(y_hat, 95)
+  exit_threshold = -np.percentile(y_hat, 30)
   print(enter_threshold, exit_threshold)
   #return
 

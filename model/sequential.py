@@ -52,6 +52,7 @@ class SequentialRegressor(object):
     model = keras.Sequential([
       layers.Dense(128, activation=tf.nn.relu, input_shape=[input_shape]),
       layers.Dense(64, activation=tf.nn.relu),
+      layers.Dense(32, activation=tf.nn.relu),
       layers.Dense(16, activation=tf.nn.relu),
       layers.Dense(1, activation='linear')
     ])
