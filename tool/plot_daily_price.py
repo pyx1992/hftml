@@ -16,7 +16,7 @@ def plot_all(_):
       20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
       20190128, 20190129, 20190130, 20190131, 20190201, 20190202, 20190203]:
     file_path = FeedReader.get_feed_file_path(
-      'data', date, 'Okex', 'ETH', 'USDT', None, FeedType.BOOK)
+      'data', date, 'Okex', 'ETH', 'USD', 20190329, FeedType.BOOK)
     df = pd.read_csv(file_path)
     df['datetime'] = pd.to_datetime(df['timestamp'])
     df['mid'] = (df['bid0'] + df['ask0']) / 2.0
@@ -32,7 +32,7 @@ def plot_all(_):
 
 def main(argv):
   file_path = FeedReader.get_feed_file_path(
-      'data', 20190129, 'Okex', 'ETH', 'USDT', None, FeedType.BOOK)
+      'data', 20190129, 'Okex', 'ETH', 'USD', 20190329, FeedType.BOOK)
   df = pd.read_csv(file_path)
   df['datetime'] = pd.to_datetime(df['timestamp'])
   df = df.set_index('datetime')
