@@ -104,6 +104,7 @@ class SnapshotBookFeature(Feature):
       names.append('snb book imbalance %d' % (i + 1))
     for i in range(self._levels):
       names.append('snb vw mid price diff %d' % (i + 1))
+    names += ['snb bid change', 'snb ask change', 'snb mid change']
     return names
 
   def to_feature(self):
@@ -136,6 +137,13 @@ class SnapshotBookFeature(Feature):
       a += self._book.bids[i][0] * wbid + self._book.asks[i][0] * wask
       b += wbid + wask
       features += [np.log(a / b) - log_current_mid]
+
+    # Bid, ask, mid movement
+    last_mid = (self._last_book.bids[0][0] + self._last_book.asks[0][0]) / 2.0
+    features += [np.log(self._book.bids[0][0] / self._last_book.bids[0][0]),
+                 np.log(self._book.asks[0][0] / self._last_book.asks[0][0]),
+                 np.log(current_mid / last_mid)]
+
     return features
 
   def reset(self):

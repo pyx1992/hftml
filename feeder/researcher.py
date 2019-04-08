@@ -160,10 +160,10 @@ class BacktestReseacher(FeatureRewardResearcher):
     price = mid(self._current_book)
     if abs(diff_pos) > 1e-6:
       if diff_pos > 0:
-        price = self._current_book.asks[0][0]
+        #price = self._current_book.asks[0][0]
         print('Buy %f @ %f %s' % (abs(diff_pos), price, dt))
       else:
-        price = self._current_book.bids[0][0]
+        #price = self._current_book.bids[0][0]
         print('Sell %f @ %f %s' % (abs(diff_pos), price, dt))
       diff_cash = -diff_pos * price
       self._cash += diff_cash

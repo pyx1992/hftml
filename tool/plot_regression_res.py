@@ -23,7 +23,7 @@ flags.DEFINE_string(
 
 def plot_regression(train_path, test_path, os_path=None):
   ncols = 2
-  if os_path is not None:
+  if os_path:
     ncols = 3
   fig, axes = plt.subplots(nrows=1, ncols=ncols)
   train_df = pd.read_csv(train_path)

@@ -55,6 +55,7 @@ def extract_feature_reward(output_path):
       'Okex', 'ETH', 'USD', 20190329,
       #[20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
       # 20190128, 20190129, 20190130, 20190131, 20190201, 20190202, 20190203],
+      [20190204, 20190205, 20190206, 20190207, 20190208, 20190209, 20190210],
       output_path)
   add_samplers_features(extractor)
   extractor.start()
@@ -193,10 +194,16 @@ def method2(sample_path, model):
     model.save_model(FLAGS.save_path)
 
   class MySignals(Signals):
-    def __init__(self, model, enter_threshold, exit_threshold, normalizer=None):
+    def __init__(
+        self, model,
+        enter_buy_threshold, enter_sell_threshold,
+        exit_buy_threshold, exit_sell_threshold,
+        normalizer=None):
       self._model = model
-      self._enter_threshold = enter_threshold
-      self._exit_threshold = exit_threshold
+      self._enter_buy_threshold = enter_buy_threshold
+      self._enter_sell_threshold = enter_sell_threshold
+      self._exit_buy_threshold = exit_buy_threshold
+      self._exit_sell_threshold = exit_sell_threshold
       self._feature = None
       self._pred = 0.0
       self._normalizer = normalizer
@@ -206,7 +213,7 @@ def method2(sample_path, model):
     def on_feature(self, feature):
       if self._normalizer:
         nfeature = self._normalizer.normalize(feature)
-      nfeature = np.array([feature])
+      nfeature = np.array([nfeature])
       self._feature = nfeature
       if np.any(np.isnan(nfeature)):
         return
@@ -215,30 +222,38 @@ def method2(sample_path, model):
       self._yhat.append(self._pred)
 
     def should_enter_buy(self):
-      return self._pred > self._enter_threshold
+      return self._pred > self._enter_buy_threshold
 
     def should_exit_buy(self):
-      return self._pred < -self._exit_threshold
+      return self._pred < self._exit_buy_threshold
 
     def should_enter_sell(self):
-      return self._pred < -self._enter_threshold
+      return self._pred < self._enter_sell_threshold
 
     def should_exit_sell(self):
-      return self._pred > self._exit_threshold
+      return self._pred > self._exit_sell_threshold
 
     def on_completed(self):
       df = pd.DataFrame(self._features)
       df['y'] = self._yhat
       df.to_csv('backtest_features.csv', index=False)
 
-  enter_threshold = np.percentile(y_hat, 99)
-  exit_threshold = -np.percentile(y_hat, 10)
-  print(enter_threshold, exit_threshold)
+  enter_buy_threshold = np.percentile(y_hat, 90)
+  enter_sell_threshold = np.percentile(y_hat, 10)
+  exit_buy_threshold = np.percentile(y_hat, 50)
+  exit_sell_threshold = np.percentile(y_hat, 50)
+  print(enter_buy_threshold, exit_buy_threshold)
+  print(enter_sell_threshold, exit_sell_threshold)
   #return
 
   backtest = BacktestReseacher(
-    'Okex', 'ETH', 'USD', 20190329, [20190204,20190205],
-    MySignals(model, enter_threshold, exit_threshold, normalizer))
+    'Okex', 'ETH', 'USD', 20190329,
+    [20190204, 20190205, 20190206, 20190207, 20190208, 20190209, 20190210],
+    MySignals(
+        model,
+        enter_buy_threshold, enter_sell_threshold,
+        exit_buy_threshold, exit_sell_threshold,
+        normalizer))
   add_samplers_features(backtest)
   backtest.start()
 
