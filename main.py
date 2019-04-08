@@ -25,6 +25,10 @@ flags.DEFINE_string(
     'load_path',
     '',
     '')
+flags.DEFINE_string(
+    'os_path',
+    '',
+    '')
 
 
 def add_samplers_features(researcher):
@@ -49,8 +53,8 @@ def add_samplers_features(researcher):
 def extract_feature_reward(output_path):
   extractor = FeatureRewardExtractor(
       'Okex', 'ETH', 'USD', 20190329,
-      [20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
-       20190128, 20190129, 20190130, 20190131, 20190201, 20190202, 20190203],
+      #[20190121, 20190122, 20190123, 20190124, 20190125, 20190126, 20190127,
+      # 20190128, 20190129, 20190130, 20190131, 20190201, 20190202, 20190203],
       output_path)
   add_samplers_features(extractor)
   extractor.start()
@@ -139,15 +143,34 @@ def method1(sample_path, classifier_cls):
   backtest.start()
 
 
+def model_os(os_path, model, model_load_path, normalizer=None):
+  model.load_model(model_load_path)
+  df = pd.read_csv(os_path)
+  df = filter_nan(df)
+  y_col = df.columns[-1]
+  if normalizer is not None:
+    df = normalizer.normalize(df)
+  y = df.pop(y_col)
+  yhat = model.predict(df)
+  sdf = pd.DataFrame({'y': y.tolist(), 'yhat': yhat.tolist()})
+  print(np.corrcoef(y, yhat))
+  sdf.to_csv('y_os.csv', index=False)
+
+
 def method2(sample_path, model):
   df = pd.read_csv(sample_path)
   df = filter_nan(df)
+  y_col = df.columns[-1]
 
   normalizer = None
-  #normalizer = Normalizer(df.describe().transpose())
-  #df = normalizer.normalize(df)
+  normalizer = Normalizer(df.describe().transpose())
 
-  y_col = df.columns[-1]
+  if FLASG.os_path:
+    model_os(FLAGS.os_path, model, FLAGS.load_path, normalizer)
+    return
+
+  df = normalizer.normalize(df)
+
   y = df.pop(y_col)
   print(y.describe())
 
