@@ -165,7 +165,7 @@ def method2(sample_path, model):
   normalizer = None
   normalizer = Normalizer(df.describe().transpose())
 
-  if FLASG.os_path:
+  if FLAGS.os_path:
     model_os(FLAGS.os_path, model, FLAGS.load_path, normalizer)
     return
 
@@ -193,20 +193,26 @@ def method2(sample_path, model):
     model.save_model(FLAGS.save_path)
 
   class MySignals(Signals):
-    def __init__(self, model, enter_threshold, exit_threshold):
+    def __init__(self, model, enter_threshold, exit_threshold, normalizer=None):
       self._model = model
       self._enter_threshold = enter_threshold
       self._exit_threshold = exit_threshold
       self._feature = None
       self._pred = 0.0
+      self._normalizer = normalizer
+      self._features = []
+      self._yhat = []
 
     def on_feature(self, feature):
-      feature = np.array([feature])
-      #print(feature)
-      self._feature = feature
-      if np.any(np.isnan(feature)):
+      if self._normalizer:
+        nfeature = self._normalizer.normalize(feature)
+      nfeature = np.array([feature])
+      self._feature = nfeature
+      if np.any(np.isnan(nfeature)):
         return
-      self._pred = self._model.predict(feature)[0]
+      self._pred = self._model.predict(nfeature)[0]
+      self._features.append(feature)
+      self._yhat.append(self._pred)
 
     def should_enter_buy(self):
       return self._pred > self._enter_threshold
@@ -220,6 +226,11 @@ def method2(sample_path, model):
     def should_exit_sell(self):
       return self._pred > self._exit_threshold
 
+    def on_completed(self):
+      df = pd.DataFrame(self._features)
+      df['y'] = self._yhat
+      df.to_csv('backtest_features.csv', index=False)
+
   enter_threshold = np.percentile(y_hat, 99)
   exit_threshold = -np.percentile(y_hat, 10)
   print(enter_threshold, exit_threshold)
@@ -229,7 +240,6 @@ def method2(sample_path, model):
     'Okex', 'ETH', 'USD', 20190329, [20190204,20190205],
     MySignals(model, enter_threshold, exit_threshold))
   add_samplers_features(backtest)
-  backtest.set_normalizer(normalizer)
   backtest.start()
 
 

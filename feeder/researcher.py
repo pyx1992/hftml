@@ -42,10 +42,6 @@ class FeatureRewardResearcher(object):
     self._last_features = None
     self._last_sampled_ts = np.nan
     self._columns = ['interval length']
-    self._normalizer = None
-
-  def set_normalizer(self, normalizer):
-    self._normalizer = normalizer
 
   def add_samplers(self, sampler):
     self._samplers.append(sampler)
@@ -129,6 +125,9 @@ class Signals(object):
   def should_exit_sell(self):
     raise NotImplementedError()
 
+  def on_completed(self):
+    raise NotImplementedError()
+
 
 class BacktestReseacher(FeatureRewardResearcher):
   def __init__(self, exchange, base, quote, expiry, dates, signals):
@@ -144,8 +143,6 @@ class BacktestReseacher(FeatureRewardResearcher):
     self._ys = []
 
   def on_sampled(self, feature, _):
-    if self._normalizer:
-      feature = self._normalizer.normalize(feature)
     self._signals.on_feature(feature)
     target_pos = self._position
     if self._signals.should_enter_buy():
@@ -181,8 +178,7 @@ class BacktestReseacher(FeatureRewardResearcher):
             (self._pnl, self._volume, self._position))
 
   def on_completed(self):
-    pd.DataFrame(self._back_features, columns=self._columns).to_csv(
-        'backtest_feature.csv', index=False)
+    self._signals.on_completed()
     print('Total Pnl: %f' % self._pnl)
     print('Total Volume %f' % self._volume)
     data = pd.DataFrame({
