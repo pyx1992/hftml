@@ -238,7 +238,7 @@ def method2(sample_path, model):
 
   backtest = BacktestReseacher(
     'Okex', 'ETH', 'USD', 20190329, [20190204,20190205],
-    MySignals(model, enter_threshold, exit_threshold))
+    MySignals(model, enter_threshold, exit_threshold, normalizer))
   add_samplers_features(backtest)
   backtest.start()
 
