@@ -5,19 +5,19 @@ import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
+from tool.plot_pnl_volume import plot_pairs
 
 
 def sim():
-  orig_features = pd.read_csv('nnfq1000.csv').dropna()
+  orig_features = pd.read_csv('ref_fq1000.csv').dropna()
   stat = orig_features.describe().transpose()
   print(stat)
 
-  bt_df = pd.read_csv('backtest_features.csv')
-  bt_df.columns = orig_features.columns
-  os_df = pd.read_csv('nnfq1000_os.csv').dropna().reset_index(drop=True)
+  y_os = pd.read_csv('y_os.csv')
+  os_df = pd.read_csv('ref_fq1000_os.csv').dropna().reset_index(drop=True)
   ychange = os_df['y'].copy()
   t_os_df = (os_df - stat['mean']) / stat['std']
-  print(bt_df.tail())
+  print(y_os.shape, ychange.shape)
   print(t_os_df.tail())
 
   y_train = pd.read_csv('y_train.csv')
@@ -31,8 +31,8 @@ def sim():
   pos = 0
   pnl = 0
   vol = 0
-  for i in range(bt_df.shape[0]):
-    ypred = bt_df.iloc[i]['y']
+  for i in range(y_os.shape[0]):
+    ypred = y_os.iloc[i]['yhat']
     change = ychange[i]
     new_pos = pos
     #if pos > 0 and ypred < exit_buy:
@@ -51,9 +51,10 @@ def sim():
       iis.append(i)
       pnls.append(pnl)
       vols.append(vol)
-  res = pd.DataFrame({'i': iis, 'pnl': pnls, 'vol': vol})
-  res.set_index('i')['pnl'].plot()
-  plt.show()
+  res = pd.DataFrame({'i': iis, 'pnl': pnls, 'vol': vols})
+  res = res.set_index('i')
+  print(res)
+  plot_pairs(res['pnl'], res['vol'])
 
 
 
