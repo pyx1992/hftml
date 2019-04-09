@@ -376,3 +376,57 @@ class StepVolumeFeature(TimedVolumeFeature):
 
   def reset(self):
     self._dq.clear()
+
+
+class ReferenceProductFeature(Feature):
+  def __init__(self):
+    self._book = None
+    self._ref_book = None
+    self._dq_short = TimedDeque(30 * 10 ** 9)
+    self._dq_long = TimedDeque(300 * 10 ** 9)
+
+  def on_feed(self, feed):
+    if feed.feed_type == FeedType.BOOK:
+      self._book = feed
+      self._on_feed(feed.timestamp)
+
+  def on_reference_product_feed(self, feed):
+    if feed.feed_type == FeedType.BOOK:
+      self._ref_book = feed
+      self._on_feed(feed.timestamp)
+
+  def _on_feed(self, ts):
+    if self._book and self._ref_book:
+      implied_rate = self._get_implied_rate()
+      self._dq_short.append(ts, implied_rate)
+      self._dq_long.append(ts, implied_rate)
+
+  def _get_implied_rate(self):
+    mid0 = mid1 = np.nan
+    if self._book:
+      mid0 = (self._book.bids[0][0] + self._book.asks[0][0]) / 2.0
+    if self._ref_book:
+      mid1 = (self._ref_book.bids[0][0] + self._ref_book.asks[0][0]) / 2.0
+    return mid0 / mid1
+
+  def _get_tw_implied_rate(self, dq):
+    if dq.size() > 0:
+      data = np.array(dq.data())
+      return np.sum(data[:-1,1] * (data[1:,0] - data[:-1,0])) / (data[-1,0] - data[0,0])
+    return np.nan
+
+  def feature_names(self):
+    return ['rf basis0', 'rf basis1', 'rf basis2']
+
+  def to_feature(self):
+    features = []
+    # Current basis
+    ir = self._get_implied_rate()
+    ir_short = self._get_tw_implied_rate(self._dq_short)
+    ir_long = self._get_tw_implied_rate(self._dq_long)
+
+    features += [np.log(ir / ir_long), np.log(ir / ir_short), np.log(ir_short / ir_long)]
+    return features
+
+  def reset(self):
+    pass

@@ -6,7 +6,7 @@ import datetime
 import numpy as np
 import pandas as pd
 
-from feeder.feeder import Feeder, FeedType
+from feeder.feeder import Feeder, FeedType, base_quote_to_symbol
 
 
 def mid(book):
@@ -34,20 +34,31 @@ class FeatureRewardResearcher(object):
     self._dates = dates
     self._samplers = []
     self._features = []
-    self._feeder = Feeder(dates, exchange, base, quote, expiry)
-    self._feeder.subscribe_book(self.on_feed)
-    self._feeder.subscribe_trade(self.on_feed)
+    self._ref_features = dict()
+    self._feeder = Feeder(dates)
+    self._feeder.set_callbacks(self.on_feed)
+    self._feeder.subscribe(exchange, base, quote, expiry, self.on_feed)
     self._last_sampled_book = None
     self._current_book = None
     self._last_features = None
     self._last_sampled_ts = np.nan
     self._columns = ['interval length']
 
+  def subscribe_reference_product(self, exchange, base, quote, expiry):
+    symbol = base_quote_to_symbol(base, quote, expiry)
+    self._ref_features[symbol] = []
+    self._feeder.subscribe(
+        exchange, base, quote, expiry, self.on_reference_product_feed)
+
   def add_samplers(self, sampler):
     self._samplers.append(sampler)
 
   def add_feature(self, feature):
     self._features.append(feature)
+
+  def add_reference_product_feature(self, symbol, feature):
+    self._features.append(feature)
+    self._ref_features[symbol].append(feature)
 
   def on_sampled(self, feature, reward):
     raise NotImplementedError()
@@ -66,6 +77,10 @@ class FeatureRewardResearcher(object):
 
   def get_reward(self):
     return np.log(mid(self._current_book) / mid(self._last_sampled_book))
+
+  def on_reference_product_feed(self, feed):
+    for f in self._ref_features[feed.symbol]:
+      f.on_reference_product_feed(feed)
 
   def on_feed(self, feed):
     if feed.feed_type == FeedType.BOOK:

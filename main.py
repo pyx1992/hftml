@@ -8,6 +8,7 @@ from absl import app, flags
 from sampler.sampler import *
 from feature.feature import *
 from feeder.researcher import *
+from feeder.feeder import base_quote_to_symbol
 
 
 FLAGS = flags.FLAGS
@@ -32,6 +33,8 @@ flags.DEFINE_string(
 
 
 def add_samplers_features(researcher):
+  researcher.subscribe_reference_product('Okex', 'ETH', 'USDT', '')
+
   #researcher.add_samplers(BestBookLevelTakenSampler(2))
   #researcher.add_samplers(FixedIntervalSampler(5))
   #researcher.add_samplers(PriceChangedSampler(10))
@@ -48,6 +51,10 @@ def add_samplers_features(researcher):
   researcher.add_feature(ArFeature(StepVwapFeature(), 3))
   researcher.add_feature(ArFeature(StepTradeFeature(), 3))
   researcher.add_feature(ArFeature(StepVolumeFeature(), 3))
+
+  researcher.add_reference_product_feature(
+      base_quote_to_symbol('ETH', 'USDT', ''),
+      ReferenceProductFeature())
 
 
 def extract_feature_reward(output_path):
@@ -238,10 +245,10 @@ def method2(sample_path, model):
       df['y'] = self._yhat
       df.to_csv('backtest_features.csv', index=False)
 
-  enter_buy_threshold = np.percentile(y_hat, 90)
-  enter_sell_threshold = np.percentile(y_hat, 10)
-  exit_buy_threshold = np.percentile(y_hat, 50)
-  exit_sell_threshold = np.percentile(y_hat, 50)
+  enter_buy_threshold = np.percentile(y_hat, 95)
+  enter_sell_threshold = np.percentile(y_hat, 5)
+  exit_buy_threshold = np.percentile(y_hat, 5)
+  exit_sell_threshold = np.percentile(y_hat, 95)
   print(enter_buy_threshold, exit_buy_threshold)
   print(enter_sell_threshold, exit_sell_threshold)
   #return
@@ -268,7 +275,7 @@ def main(argv):
   from model.linear_model import LinearModel
   #method1(output_path, SvmClassifier)
   #method1(output_path, SequentialClassifier)
-  method2(output_path, SequentialRegressor(epochs=15, lr=0.001))
+  method2(output_path, SequentialRegressor(epochs=12, lr=0.001))
   #method2(output_path, LinearModel())
 
 

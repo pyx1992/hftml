@@ -151,13 +151,8 @@ class FeedReader(object):
 
 
 class Feeder(object):
-  def __init__(self, dates, exchange, base, quote, expiry):
+  def __init__(self, dates):
     self._dates = dates
-    self._exchange = exchange
-    self._base = base
-    self._quote = quote
-    self._symbol = base_quote_to_symbol(base, quote, expiry)
-    self._expiry = expiry
     self._feed_readers = dict()
     self._feed = PriorityQueue()
     self._book_callback = None
@@ -165,41 +160,48 @@ class Feeder(object):
 
   def start_feed(self):
     while True:
-      feed = self._next()
+      feed, callback = self._next()
       if not feed:
         break
-      if feed.feed_type == FeedType.BOOK and self._book_callback:
-        self._book_callback(feed)
-      elif feed.feed_type == FeedType.TRADE and self._trade_callback:
-        self._trade_callback(feed)
+      if callback:
+        callback(feed)
 
   def _next(self):
     if self._feed.empty():
-      return None
+      return None, None
     key, feed = self._feed.pop()
-    next_feed = self._feed_readers[key].next()
+    feed_reader, callback = self._feed_readers[key]
+    next_feed = feed_reader.next()
     if next_feed:
       self._feed.add(next_feed.timestamp, (key, next_feed))
-    return feed
+    return feed, callback
 
-  def subscribe_book(self, func):
-    self._book_callback = func
+  def subscribe(self, exchange, base, quote, expiry, callback):
+    self.subscribe_book(exchange, base, quote, expiry, callback)
+    self.subscribe_trade(exchange, base, quote, expiry, callback)
+
+  def subscribe_book(self, exchange, base, quote, expiry, callback):
+    symbol = base_quote_to_symbol(base, quote, expiry)
     for date in self._dates:
-      key = (date, self._symbol, FeedType.BOOK)
+      key = (date, symbol, FeedType.BOOK)
       feed_reader = FeedReader(
-          date, self._exchange, self._base, self._quote, self._expiry, FeedType.BOOK)
+          date, exchange, base, quote, expiry, FeedType.BOOK)
       feed = feed_reader.next()
       if feed:
-        self._feed_readers[key] = feed_reader
+        self._feed_readers[key] = (feed_reader, callback)
         self._feed.add(feed.timestamp, (key, feed))
 
-  def subscribe_trade(self, func):
-    self._trade_callback = func
+  def subscribe_trade(self, exchange, base, quote, expiry, callback):
+    symbol = base_quote_to_symbol(base, quote, expiry)
     for date in self._dates:
-      key = (date, self._symbol, FeedType.TRADE)
+      key = (date, symbol, FeedType.TRADE)
       feed_reader = FeedReader(
-          date, self._exchange, self._base, self._quote, self._expiry, FeedType.TRADE)
+          date, exchange, base, quote, expiry, FeedType.TRADE)
       feed = feed_reader.next()
       if feed:
-        self._feed_readers[key] = feed_reader
+        self._feed_readers[key] = (feed_reader, callback)
         self._feed.add(feed.timestamp, (key, feed))
+
+  def set_callbacks(self, callback):
+    self._book_callback = callback
+    self._trade_callback = callback
